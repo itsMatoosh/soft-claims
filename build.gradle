@@ -1,0 +1,48 @@
+plugins {
+    id 'com.github.johnrengelman.shadow' version '5.2.0'
+    id 'java'
+}
+
+group 'me.matoosh'
+version '1.6'
+
+sourceCompatibility = targetCompatibility = JavaVersion.VERSION_1_8
+
+repositories {
+    maven { url 'https://papermc.io/repo/repository/maven-public/' }
+    maven { url = "https://repo.aikar.co/content/groups/aikar/" }
+    maven { url = "https://hub.spigotmc.org/nexus/content/groups/public/" }
+    maven { url "https://repo.dmulloy2.net/repository/public/" }
+    maven { url "https://nexus.savagelabs.net/repository/maven-releases/" }
+    mavenCentral()
+}
+
+dependencies {
+    // factionsx
+    compileOnly 'net.prosavage.factionsx:FactionsX:1.0.8-RC'
+
+    // protocollib
+    compileOnly group: "com.comphenix.protocol", name: "ProtocolLib", version: "4.6.0";
+    testImplementation group: "com.comphenix.protocol", name: "ProtocolLib", version: "4.6.0";
+
+    // command lib
+    compile "co.aikar:acf-paper:0.5.0-SNAPSHOT"
+
+    // plugin.yml annotations
+    compileOnly 'org.spigotmc:plugin-annotations:1.2.3-SNAPSHOT'
+    annotationProcessor 'org.spigotmc:plugin-annotations:1.2.3-SNAPSHOT'
+
+    // paper api
+    compileOnly 'com.destroystokyo.paper:paper-api:1.16.5-R0.1-SNAPSHOT'
+
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    testImplementation 'com.github.seeseemelk:MockBukkit-v1.16:0.25.0'
+    testImplementation 'net.kyori:adventure-platform-bukkit:4.0.0-SNAPSHOT'
+}
+
+shadowJar {
+    relocate 'co.aikar.commands', 'me.matoosh.sleepers.acf'
+    relocate 'co.aikar.locales', 'me.matoosh.sleepers.locales'
+}
+
+build.dependsOn shadowJar
