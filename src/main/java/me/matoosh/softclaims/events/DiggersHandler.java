@@ -31,6 +31,8 @@ import java.util.HashMap;
 public class DiggersHandler implements PacketListener, Listener {
     private final SoftClaimsPlugin plugin;
     private final HashMap<Integer, DigProgress> diggers = new HashMap<>();
+    private final PotionEffect fatigueEffect = new PotionEffect(
+            PotionEffectType.SLOW_DIGGING, 120, 3, false, false);
 
     public DiggersHandler(SoftClaimsPlugin plugin) {
         this.plugin = plugin;
@@ -85,7 +87,8 @@ public class DiggersHandler implements PacketListener, Listener {
         if (blockDurability == 0) return;
 
         // apply fatigue
-        applyFatigue(player);
+        Bukkit.getScheduler().runTask(
+                plugin, () -> applyFatigue(player));
 
         // make sure no duplicate digging tasks are running
         onStopDigging(player);
@@ -170,7 +173,8 @@ public class DiggersHandler implements PacketListener, Listener {
             }
 
             // clear fatigue effect
-            clearFatigue(player);
+            Bukkit.getScheduler().runTask(
+                    plugin, () -> clearFatigue(player));
 
             // clear animation
             setDigProgress(player, digProgress.getPosition(), -1);
@@ -205,11 +209,9 @@ public class DiggersHandler implements PacketListener, Listener {
      * Applies mining fatigue for player.
      * @param player
      */
-    private void applyFatigue(Player player) {
+    public void applyFatigue(Player player) {
         Bukkit.getScheduler().runTask(plugin, () -> {
-            PotionEffect effect = new PotionEffect(
-                    PotionEffectType.SLOW_DIGGING, 2000, 3, false, false);
-            player.addPotionEffect(effect);
+            player.addPotionEffect(fatigueEffect);
         });
     }
 
@@ -217,8 +219,8 @@ public class DiggersHandler implements PacketListener, Listener {
      * Clears mining fatigue from player.
      * @param player
      */
-    private void clearFatigue(Player player) {
-        Bukkit.getScheduler().runTask(plugin, () -> player.removePotionEffect(PotionEffectType.SLOW_DIGGING));
+    public void clearFatigue(Player player) {
+        player.removePotionEffect(PotionEffectType.SLOW_DIGGING);
     }
 
     /**

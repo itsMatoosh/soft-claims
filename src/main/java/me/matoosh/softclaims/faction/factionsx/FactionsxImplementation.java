@@ -13,7 +13,7 @@ import net.prosavage.factionsx.util.Relation;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -33,7 +33,9 @@ public class FactionsxImplementation implements IFactionImplementation {
 
     @Override
     public List<String> getFactions() {
-        return null;
+        return FactionManager.INSTANCE.getFactions()
+                .parallelStream().map(Faction::getTag)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -69,14 +71,12 @@ public class FactionsxImplementation implements IFactionImplementation {
     }
 
     @Override
-    public List<Chunk> getAllFactionChunks() {
-        List<Chunk> chunks = new ArrayList<>();
-        for (Faction faction : FactionManager.INSTANCE.getFactions()) {
-            if (faction.isSystemFaction()) continue;
-            chunks.addAll(GridManager.INSTANCE.getAllClaims(faction)
-                    .stream().map(FLocation::getChunk).collect(Collectors.toList()));
-        }
-        return chunks;
+    public List<Chunk> getAllFactionChunks(String factionName) {
+        Faction faction = FactionManager.INSTANCE.getFaction(factionName);
+        if (faction == null) return Collections.emptyList();
+        return GridManager.INSTANCE.getAllClaims(faction)
+                .stream().map(FLocation::getChunk)
+                .collect(Collectors.toList());
     }
 
     private Faction getFactionByChunk(Chunk factionChunk) {

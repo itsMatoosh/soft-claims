@@ -4,7 +4,7 @@ plugins {
 }
 
 group 'me.matoosh'
-version '1.6'
+version '1.7'
 
 sourceCompatibility = targetCompatibility = JavaVersion.VERSION_1_8
 
@@ -35,9 +35,14 @@ dependencies {
     // paper api
     compileOnly 'com.destroystokyo.paper:paper-api:1.16.5-R0.1-SNAPSHOT'
 
+    // jackson
+    implementation group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-yaml', version: '2.12.3'
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.12.3'
+
+    // rx io
+    implementation 'com.github.javasync:RxIo:1.2.1'
+
     testCompile group: 'junit', name: 'junit', version: '4.12'
-    testImplementation 'com.github.seeseemelk:MockBukkit-v1.16:0.25.0'
-    testImplementation 'net.kyori:adventure-platform-bukkit:4.0.0-SNAPSHOT'
 }
 
 shadowJar {

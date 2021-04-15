@@ -1,5 +1,11 @@
-# blocks whose durability the plugin should handle
+# durabilities of block that should be handled
 blocks:
+  BARREL:
+    durability: 200
+    drop: true
+  CHEST:
+    durability: 300
+    drop: true
   OAK_PLANKS:
     durability: 500
     drop: true
@@ -24,94 +30,134 @@ blocks:
   WARPED_PLANKS:
     durability: 500
     drop: true
+  STONECUTTER:
+    durability: 700
+    drop: true
+  COBWEB:
+    durability: 500
+    drop: true
+  STONE:
+    durability: 200
+    drop: true
+  DIRT:
+    durability: 500
+    drop: true
   STRIPPED_OAK_LOG:
-    durability: 2000
+    durability: 2500
     drop: true
   STRIPPED_SPRUCE_LOG:
-    durability: 2000
+    durability: 2500
     drop: true
   STRIPPED_BIRCH_LOG:
-    durability: 2000
+    durability: 2500
     drop: true
   STRIPPED_JUNGLE_LOG:
-    durability: 2000
+    durability: 2500
     drop: true
   STRIPPED_ACACIA_LOG:
-    durability: 2000
+    durability: 2500
     drop: true
   STRIPPED_DARK_OAK_LOG:
-    durability: 2000
+    durability: 2500
     drop: true
   STRIPPED_CRIMSON_STEM:
-    durability: 2000
+    durability: 2500
     drop: true
   STRIPPED_WARPED_STEM:
-    durability: 2000
+    durability: 2500
     drop: true
   SPRUCE_DOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   BIRCH_DOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   JUNGLE_DOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   ACACIA_DOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   DARK_OAK_DOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   CRIMSON_DOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   WARPED_DOOR:
-    durability: 1500
+    durability: 2000
+    drop: true
+  OAK_TRAPDOOR:
+    durability: 2000
     drop: true
   SPRUCE_TRAPDOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   BIRCH_TRAPDOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   JUNGLE_TRAPDOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   ACACIA_TRAPDOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   DARK_OAK_TRAPDOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   CRIMSON_TRAPDOOR:
-    durability: 1500
+    durability: 2000
     drop: true
   WARPED_TRAPDOOR:
-    durability: 1500
+    durability: 2000
     drop: true
+  SMOOTH_STONE_SLAB:
+    durability: 2000
+    drop: false
   SMOOTH_STONE:
-    durability: 5000
+    durability: 4000
+    drop: false
+  IRON_DOOR:
+    durability: 7000
+    drop: false
+  IRON_TRAPDOOR:
+    durability: 7000
+    drop: false
+  IRON_BLOCK:
+    durability: 8000
     drop: false
   BRICKS:
     durability: 10000
     drop: false
-  IRON_DOOR:
-    durability: 20000
+  OBSIDIAN:
+    durability: 12000
     drop: false
-  IRON_TRAPDOOR:
-    durability: 20000
+  ANCIENT_DEBRIS:
+    durability: 12000
     drop: false
-  IRON_BLOCK:
+  CRYING_OBSIDIAN:
     durability: 30000
     drop: false
-  OBSIDIAN:
-    durability: 50000
-    drop: false
-# the power that an explosion has at its center
-explosionPower: 500
-# modifier to the amount of damage done to tools which you mine with
+
+# the damage that an explosion will do to adjacent durable blocks
+explosionDamage:
+  PRIMED_TNT: 100
+  CREEPER: 30
+  WITHER_SKULL: 10
+  ENDER_DRAGON: 500
+  BED: 5
+  RESPAWN_ANCHOR: 5
+# modifier to the amount of damage done to tools used to mine durable blocks
+# applied per durability point
 toolDamageModifier: 0.2
+# block repair settings
+repair:
+  # amount of durability restored each time a block is healed
+  repairDelta: 100
+  # the cost to repair a single block by the amount specified in "repairDelta"
+  repairCost: 0.01
+  # frequency in seconds at which blocks in each faction will be repaired
+  repairFrequency: 300
 # worlds in which the plugin is disabled
 disabledWorlds:
   - disabledWorld

@@ -31,7 +31,7 @@ public class NoFactionImplementation implements IFactionImplementation {
     }
 
     @Override
-    public List<Chunk> getAllFactionChunks() {
+    public List<Chunk> getAllFactionChunks(String factionName) {
         return Collections.emptyList();
     }
 }

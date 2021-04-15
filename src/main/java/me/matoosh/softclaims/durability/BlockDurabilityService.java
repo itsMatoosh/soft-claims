@@ -1,18 +1,25 @@
 package me.matoosh.softclaims.durability;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.InvalidConfigurationException;
-import org.bukkit.configuration.file.YamlConfiguration;
+import org.javaync.io.AsyncFiles;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 public class BlockDurabilityService {
@@ -22,7 +29,8 @@ public class BlockDurabilityService {
     /**
      * Durabilities of each block grouped by chunk.
      */
-    private final HashMap<Chunk, HashMap<String, Double>> durabilities = new HashMap<>();
+    private final ConcurrentMap<Chunk, Map<String, Double>> durabilities
+            = new ConcurrentHashMap<>();
     /**
      * Chunks that are currently being loaded/persisted.
      */
@@ -31,11 +39,37 @@ public class BlockDurabilityService {
     /**
      * Regions that are currently being loaded/persisted and their load futures.
      */
-    private final Map<String, Deque<CompletableFuture<Void>>> busyRegions
-            = Collections.synchronizedMap(new HashMap<>());
+    private final ConcurrentMap<String, CompletableFuture<Void>> busyRegions
+            = new ConcurrentHashMap<>();
+
+    /**
+     * Chain of futures used for loading/persisting regions.
+     */
+    private final Set<CompletableFuture<Void>> regionFutureChain =
+            Collections.synchronizedSet(new HashSet<>());
+
+    /**
+     * YAML data file mapper.
+     */
+    private final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
 
     public BlockDurabilityService(SoftClaimsPlugin plugin) {
         this.plugin = plugin;
+        initialize();
+    }
+
+    /**
+     * Initialize the data.
+     */
+    private void initialize() {
+        Path dataPath = getDurabilitiesFolder();
+        if (!Files.exists(dataPath)) {
+            try {
+                Files.createDirectory(dataPath);
+            } catch (IOException exception) {
+                exception.printStackTrace();
+            }
+        }
     }
 
     /**
@@ -80,6 +114,79 @@ public class BlockDurabilityService {
     }
 
     /**
+     * Modifies all durabilities in a chunk by a delta.
+     * Relatively expensive operation.
+     * @param chunk The chunk.
+     * @param delta The change in durabilities.
+     * @return List of modified durability keys.
+     */
+    public List<String> modifyDurabilitiesInChunk(Chunk chunk, int delta)
+            throws ChunkBusyException {
+        // check if delta is correct
+        if (!Double.isFinite(delta)) return Collections.emptyList();
+
+        // check if chunk busy
+        if (isChunkBusy(chunk)) {
+            throw new ChunkBusyException();
+        }
+
+        // get chunk inner map
+        Map<String, Double> innerMap = durabilities.get(chunk);
+        if (innerMap == null) return Collections.emptyList();
+
+        // modify all durabilities
+        List<String> modified = new ArrayList<>(innerMap.entrySet().size());
+        Iterator<Map.Entry<String, Double>> iter = innerMap.entrySet().iterator();
+        while (iter.hasNext()) {
+            // get current durability
+            Map.Entry<String, Double> entry = iter.next();
+            String[] posUnparsed = entry.getKey().split(",");
+            Block block = chunk.getBlock(
+                    Integer.parseInt(posUnparsed[0]),
+                    Integer.parseInt(posUnparsed[1]),
+                    Integer.parseInt(posUnparsed[2])
+            );
+            int durability = getAbsoluteDurability(block, entry.getValue());
+
+            // get new durability
+            double newDurability = getDurabilityRelative(block, durability + delta);
+
+            // clear if outside of range
+            if (newDurability <= 0 || newDurability >= 1) {
+                iter.remove();
+                continue;
+            }
+
+            // update durability
+            entry.setValue(newDurability);
+            modified.add(entry.getKey());
+        }
+
+        return modified;
+    }
+
+    /**
+     * Counts damaged blocks in chunk.
+     * @param chunk The chunk.
+     * @return The number of damaged blocks in the chunk.
+     * @throws ChunkBusyException thrown if the chunk is busy.
+     */
+    public int countDamagedInChunk(Chunk chunk) throws ChunkBusyException {
+        // check if chunk busy
+        if (isChunkBusy(chunk)) {
+            throw new ChunkBusyException();
+        }
+
+        // get chunk inner map
+        Map<String, Double> innerMap = durabilities.get(chunk);
+        if (innerMap == null) {
+            return 0;
+        } else {
+            return innerMap.size();
+        }
+    }
+
+    /**
      * Get durability of a block.
      * @param block The block.
      * @return Current durability of the block.
@@ -113,7 +220,7 @@ public class BlockDurabilityService {
 
         // get chunk
         Chunk chunk = block.getChunk();
-        HashMap<String, Double> innerMap = durabilities.get(chunk);
+        Map<String, Double> innerMap = durabilities.get(chunk);
         if (innerMap == null) {
             // no data stored for the chunk
             // default to total durability
@@ -205,18 +312,17 @@ public class BlockDurabilityService {
     public void clearDurability(Block block) {
         // get chunk
         Chunk chunk = block.getChunk();
-        HashMap<String, Double> innerMap = durabilities.get(chunk);
-        if(innerMap == null) return; // not present
-
-        // check if last value
-        if (innerMap.size() <= 1) {
-            // remove inner map
-            durabilities.remove(chunk);
-            return;
-        }
+        Map<String, Double> innerMap = durabilities.get(chunk);
+        if (innerMap == null) return; // not present
 
         // get position in inner map
         innerMap.remove(getBlockKeyInChunk(block));
+
+        // check if last value
+        if (innerMap.size() < 1) {
+            // remove inner map
+            durabilities.remove(chunk);
+        }
     }
 
     /**
@@ -225,47 +331,104 @@ public class BlockDurabilityService {
      * but only 1 task can run for a single region
      * at any time.
      * @param chunk Chunk which is in the region which we want to schedule a task for.
-     * @param runnable The task to be scheduled.
+     * @param task The task to be scheduled.
+     * @return Future of the task.
      */
-    private void scheduleRegionTask(Chunk chunk, Runnable runnable) {
+    private CompletableFuture<Void> scheduleRegionTask(Chunk chunk, java.util.function.Function
+            <Void, ? extends java.util.concurrent.CompletableFuture<Void>> task) {
         // check if region is busy
         String regionKey = getRegionKey(chunk);
-        Deque<CompletableFuture<Void>> lastFutures = busyRegions.computeIfAbsent(
-                regionKey, (k) -> new LinkedList<>());
+        CompletableFuture<Void> lastFuture = busyRegions.get(regionKey);
 
         // schedule operation
         CompletableFuture<Void> newFuture;
-        try {
+        if (lastFuture != null) {
             // append future
-            CompletableFuture<Void> lastFuture = lastFutures.getLast();
-            newFuture = lastFuture.thenRunAsync(runnable);
-        } catch (NoSuchElementException exception) {
-            // new future
-            newFuture = CompletableFuture.runAsync(runnable);
-        }
-        lastFutures.add(newFuture);
+            newFuture = lastFuture.thenComposeAsync(task);
 
-        // clean up after task is done
+            // add last future as chained
+            regionFutureChain.add(lastFuture);
+        } else {
+            // first future in the chain
+            newFuture = task.apply(null);
+        }
+        // set this future as the latest future for the region
+        busyRegions.put(regionKey, newFuture);
+
+        // append clean up task after the task is done
         CompletableFuture<Void> finalNewFuture = newFuture;
-        newFuture.thenRun(() -> {
-            Deque<CompletableFuture<Void>> futures = busyRegions.get(regionKey);
-            if (futures != null && futures.size() > 0) {
-                futures.remove(finalNewFuture);
-                if (futures.size() == 0) {
-                    // remove future queue
-                    busyRegions.remove(regionKey);
-                }
+        newFuture.thenRunAsync(() -> {
+            if (regionFutureChain.contains(finalNewFuture)) {
+                // there is the next future chained after this one
+                // only remove chain reference
+                regionFutureChain.remove(finalNewFuture);
+            } else {
+                // there is no task scheduled after this one for now
+                // clear the region record
+                busyRegions.remove(regionKey);
+            }
+        });
+
+        return newFuture;
+    }
+
+    /**
+     * Reads region durability data.
+     * @param regionFile Path to the region file.
+     * @return Map of region durability data.
+     */
+    private CompletableFuture<Map<String, Map<String, Double>>> readRegionData(Path regionFile) {
+        // read file text
+        return AsyncFiles.readAll(regionFile).thenApplyAsync(content -> {
+            // parse file
+            try {
+                return mapper.readValue(
+                        content, new TypeReference<Map<String, Map<String, Double>>>(){});
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+                throw new CompletionException(e);
             }
         });
     }
 
     /**
+     * Reads region durability data.
+     * @param regionFile Path to the region file.
+     * @return Map of region durability data.
+     */
+    private CompletableFuture<Integer> writeRegionData(
+            Path regionFile, Map<String, Map<String, Double>> data) {
+        // remove old file to overwrite
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return Files.deleteIfExists(regionFile);
+            } catch (IOException ignored) {
+                return false;
+            }
+        }).thenApplyAsync((s) -> {
+            // serialize to yaml
+            if (data == null) return null;
+            try {
+                return mapper.writeValueAsString(data);
+            } catch (JsonProcessingException e) {
+                throw new CompletionException(e);
+            }
+        })
+        .thenCompose((content) -> content != null
+                ? AsyncFiles.writeBytes(regionFile, content.getBytes(),
+                StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW)
+                : CompletableFuture.completedFuture(0));
+    }
+
+    /**
      * Persists all loaded block data.
      */
-    public void persistAll() {
-        for (Chunk chunk : durabilities.keySet()) {
-            persistChunk(chunk, false);
-        }
+    public CompletableFuture<Void> persistAll() {
+        return CompletableFuture.allOf(
+                durabilities.keySet().stream()
+                        .map((chunk -> persistChunk(chunk, false)))
+                        .toArray(CompletableFuture[]::new)
+        );
     }
 
     /**
@@ -273,138 +436,117 @@ public class BlockDurabilityService {
      * @param chunk The chunk to persist.
      * @param unload Whether the chunk should be unloaded from memory.
      */
-    public void persistChunk(Chunk chunk, boolean unload) {
+    public CompletableFuture<Void> persistChunk(Chunk chunk, boolean unload) {
         // save chunk asynchronously
-        scheduleRegionTask(chunk, () -> persistChunkSync(chunk, unload));
+        return scheduleRegionTask(chunk, (s) -> persistChunkAsync(chunk, unload));
     }
 
     /**
-     * Persists chunk durability data on disk synchronously.
+     * Persists chunk durability data on disk asynchronously.
      * @param chunk The chunk to persist.
      * @param unload Whether the chunk should be unloaded from memory.
      */
-    private void persistChunkSync(Chunk chunk, boolean unload) {
+    private CompletableFuture<Void> persistChunkAsync(Chunk chunk, boolean unload) {
         // set busy
         busyChunks.add(chunk);
 
-        // get chunk data
-        Map<String, Double> innerMap;
-        if(unload) {
-            innerMap = durabilities.remove(chunk);
-        } else {
-            innerMap = durabilities.get(chunk);
-        }
+        // get region path
+        Path regionFilePath = getRegionFile(chunk);
 
-        // get appropriate file
-        String regionFileName = getRegionFileName(chunk);
-        File chunkConfigFile = new File(plugin.getDataFolder(), regionFileName);
-
-        // create if not present
-        YamlConfiguration chunkConfig;
-        if (!chunkConfigFile.exists()) {
-            if(innerMap == null) {
-                // not busy
-                markChunkNotBusy(chunk);
-                return;
+        // read current region data
+        return readRegionData(regionFilePath)
+        .exceptionallyAsync((e) ->{
+            // error reading file
+            // possibly doesnt exist
+            return null;
+        })
+        .thenApplyAsync((data) -> {
+            // get chunk data
+            Map<String, Double> chunkDurabilities;
+            if(unload) {
+                chunkDurabilities = durabilities.remove(chunk);
+            } else {
+                chunkDurabilities = durabilities.get(chunk);
             }
-            chunkConfig = new YamlConfiguration();
-        } else {
-            // load chunk's config
-            chunkConfig = new YamlConfiguration();
-            try {
-                chunkConfig.load(chunkConfigFile);
-            } catch (IOException | InvalidConfigurationException e) {
-                // failed to load chunk data
-                e.printStackTrace();
-                // not busy
-                markChunkNotBusy(chunk);
-                return;
+
+            // update data
+            String chunkSection = getChunkKey(chunk);
+            if (data != null) {
+                // durabilities already stored for this region, append
+                if (chunkDurabilities == null) {
+                    // no durabilities to save for this chunk, remove entry from region
+                    data.remove(chunkSection);
+                } else {
+                    // update durabilities for this chunk
+                    data.put(chunkSection, chunkDurabilities);
+                }
+            } else if (chunkDurabilities != null) {
+                // no durabilities stored for this region yet, create new map
+                data = new HashMap<>();
+                data.put(chunkSection, chunkDurabilities);
             }
-        }
 
-        // create new entry
-        String chunkSection = getChunkKey(chunk);
-        if(innerMap != null) {
-            chunkConfig.createSection(chunkSection, innerMap);
-        } else {
-            chunkConfig.set(chunkSection, null);
-        }
-
-        // remove file if empty
-        if(chunkConfig.getValues(false).size() == 0) {
-            chunkConfigFile.delete();
-        } else {
-            // save
-            try {
-                chunkConfig.save(chunkConfigFile);
-            } catch (IOException e) {
-                // error saving chunk data
-                e.printStackTrace();
-
-                // not busy
-                markChunkNotBusy(chunk);
-
-                return;
+            // delete empty region files
+            if (data != null && data.size() == 0) {
+                data = null;
             }
-        }
 
-        // not busy
-        markChunkNotBusy(chunk);
+            return data;
+        }).thenCompose((data) -> writeRegionData(regionFilePath, data))
+        .exceptionallyAsync((e) -> {
+            // error writing chunk data
+            // not busy
+            e.printStackTrace();
+            return null;
+        })
+        .thenAcceptAsync((data) -> {
+            // not busy
+            busyChunks.remove(chunk);
+        });
     }
 
     /**
      * Loads chunk durability data into memory.
      * @param chunk The chunk.
      */
-    public void loadChunk(Chunk chunk) {
+    public CompletableFuture<Void> loadChunk(Chunk chunk) {
         // load chunk asynchronously
-        scheduleRegionTask(chunk, () -> loadChunkSync(chunk));
+        return scheduleRegionTask(chunk, (s) -> loadChunkAsync(chunk));
     }
 
     /**
      * Loads chunk durability data into memory synchronously.
      * @param chunk The chunk.
      */
-    private void loadChunkSync(Chunk chunk) {
-        // set busy
-        busyChunks.add(chunk);
+    private CompletableFuture<Void> loadChunkAsync(Chunk chunk) {
+        return CompletableFuture.supplyAsync(() ->{
+            // set busy
+            busyChunks.add(chunk);
 
-        // get appropriate file
-        String regionFileName = getRegionFileName(chunk);
-
-        // skip inexistent
-        File chunkConfigFile = new File(plugin.getDataFolder(), regionFileName);
-        if (!chunkConfigFile.exists()) {
+            // get appropriate file
+            return getRegionFile(chunk);
+        })
+        .thenCompose(this::readRegionData)
+        .exceptionallyAsync((e) -> {
+            // error loading chunk data
             // not busy
-            markChunkNotBusy(chunk);
-            return;
-        }
+            busyChunks.remove(chunk);
+            return null;
+        })
+        .thenAcceptAsync((data) -> {
+            // check if load was successful
+            if (data == null) return;
 
-        // load chunks config
-        YamlConfiguration chunkConfig = new YamlConfiguration();
-        try {
-            chunkConfig.load(chunkConfigFile);
-        } catch (IOException | InvalidConfigurationException e) {
-            e.printStackTrace();
-            // not busy
-            markChunkNotBusy(chunk);
-            return;
-        }
-
-        // load
-        String chunkSection = getChunkKey(chunk);
-        ConfigurationSection chunkSectionLoaded = chunkConfig.getConfigurationSection(chunkSection);
-        if(chunkSectionLoaded != null) {
-            HashMap<String, Double> innerMap = new HashMap<>();
-            for (Map.Entry<String, Object> entry : chunkSectionLoaded.getValues(false).entrySet()) {
-                innerMap.put(entry.getKey(), (double)(entry.getValue()));
+            // load
+            String chunkSection = getChunkKey(chunk);
+            Map<String, Double> chunkData = data.get(chunkSection);
+            if (chunkData != null) {
+                durabilities.put(chunk, chunkData);
             }
-            plugin.getLogger().info("Loaded " + innerMap.size() + " durabilities at: " + chunk.toString());
-            durabilities.put(chunk, innerMap);
-        }
 
-        // not busy
-        markChunkNotBusy(chunk);
+            // not busy
+            busyChunks.remove(chunk);
+        });
     }
 
     /**
@@ -465,14 +607,6 @@ public class BlockDurabilityService {
     }
 
     /**
-     * Marks a chunk as no longer busy.
-     * @param chunk The chunk.
-     */
-    private void markChunkNotBusy(Chunk chunk) {
-        busyChunks.remove(chunk);
-    }
-
-    /**
      * Gets a key unique for a block in a chunk.
      * @param block The block for which to get the key.
      * @return The key.
@@ -494,15 +628,6 @@ public class BlockDurabilityService {
      */
     public String getBlockKeyInChunk(int x, int y, int z) {
         return x + "," + y + "," + z;
-    }
-
-    /**
-     * Get file name under which a region file should be saved.
-     * @param chunk The chunk in the saved region.
-     * @return The file name.
-     */
-    public String getRegionFileName(Chunk chunk) {
-        return chunk.getWorld().getName() + "_" + getRegionKey(chunk) + ".yml";
     }
 
     /**
@@ -531,5 +656,22 @@ public class BlockDurabilityService {
      */
     public boolean isChunkBusy(Chunk chunk) {
         return busyChunks.contains(chunk);
+    }
+
+    /**
+     * Get file name under which a region file should be saved.
+     * @param chunk The chunk in the saved region.
+     * @return The file name.
+     */
+    public Path getRegionFile(Chunk chunk) {
+        return getDurabilitiesFolder().resolve(chunk.getWorld().getName() + "_" + getRegionKey(chunk) + ".yml");
+    }
+
+    /**
+     * Get path to the durabilities folder.
+     * @return
+     */
+    public Path getDurabilitiesFolder() {
+        return plugin.getDataFolder().toPath().resolve("data");
     }
 }

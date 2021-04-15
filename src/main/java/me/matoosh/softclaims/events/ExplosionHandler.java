@@ -3,14 +3,18 @@ package me.matoosh.softclaims.events;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Chunk;
+import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 public class ExplosionHandler implements Listener {
 
@@ -21,13 +25,31 @@ public class ExplosionHandler implements Listener {
     }
 
     @EventHandler
-    private void onExplosion(EntityExplodeEvent event) {
+    public void onEntityExplosion(EntityExplodeEvent event) {
+        onExplosion(event.blockList(), event.getLocation(), (s) -> plugin.getConfig().getInt(
+                "explosionDamage." + event.getEntityType().name(), 100));
+    }
+
+    @EventHandler
+    public void onBlockExplosion(BlockExplodeEvent event) {
+        onExplosion(event.blockList(), event.getBlock().getLocation(), (s) -> plugin.getConfig().getInt(
+                "explosionDamage." + event.getBlock().getType().name(), 100));
+    }
+
+    private void onExplosion(List<Block> blockList, Location location,
+                             Function<Void, Integer> powerFunction) {
+        // check if this world is disabled
+        if (plugin.getConfig().getStringList("disabledWorlds")
+                .contains(location.getWorld().getName())) {
+            return;
+        }
+
         Set<Block> durableBlocks = new HashSet<>(); // durable blocks that should be processed further
         Set<Chunk> skipChunks = new HashSet<>(); // chunks not in faction land that should be skipped
         Set<Chunk> actChunks = new HashSet<>(); // chunks in faction land that should be processed
-        Iterator<Block> iter = event.blockList().iterator();
-        while (iter.hasNext()) {
-            Block block = iter.next();
+        Iterator<Block> blockIterator = blockList.iterator();
+        while (blockIterator.hasNext()) {
+            Block block = blockIterator.next();
 
             // skip origin chunks if outside faction
             if (skipChunks.contains(block.getChunk())) {
@@ -48,13 +70,13 @@ public class ExplosionHandler implements Listener {
 
                 // add block to processing
                 durableBlocks.add(block);
-                iter.remove();
+                blockIterator.remove();
             }
         }
         if (durableBlocks.size() == 0) return;
 
-        // explosion power
-        int power = plugin.getConfig().getInt("explosionPower", 100);
+        // get power
+        int power = powerFunction.apply(null);
 
         // apply damage to blocks
         for (Block b : durableBlocks) {
@@ -67,7 +89,7 @@ public class ExplosionHandler implements Listener {
 
             // calculate damage to block based on distance
             // to the center of the explosion
-            double dist = event.getLocation().distanceSquared(b.getLocation());
+            double dist = location.distanceSquared(b.getLocation());
             // 2 and 0.7 ensure that explosion 1 block away from the block
             // damaged the block with the full power. Explosions inside of the
             // block will result in double the power being exerted.
@@ -82,7 +104,7 @@ public class ExplosionHandler implements Listener {
             } else {
                 // block exploded
                 plugin.getBlockDurabilityService().clearDurability(b);
-                event.blockList().add(b);
+                blockList.add(b);
             }
         }
     }

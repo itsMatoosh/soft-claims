@@ -27,8 +27,9 @@ import org.bukkit.plugin.java.annotation.plugin.Website;
 import org.bukkit.plugin.java.annotation.plugin.author.Author;
 
 import java.io.File;
+import java.util.concurrent.ExecutionException;
 
-@Plugin(name = "SoftClaims", version = "1.6")
+@Plugin(name = "SoftClaims", version = "1.7")
 @ApiVersion(ApiVersion.Target.v1_15)
 @Description("Blocks in other factions' land are much harder to break.")
 @Author("itsMatoosh")
@@ -70,10 +71,13 @@ public class SoftClaimsPlugin extends JavaPlugin {
         this.blockRepairService.initialize();
 
         // load data
-        for (World world :
-                Bukkit.getWorlds()) {
+        for (World world : Bukkit.getWorlds()) {
             for(Chunk chunk : world.getLoadedChunks()) {
-                getBlockDurabilityService().loadChunk(chunk);
+                try {
+                    getBlockDurabilityService().loadChunk(chunk).get();
+                } catch (InterruptedException | ExecutionException e) {
+                    e.printStackTrace();
+                }
             }
         }
 
@@ -89,8 +93,11 @@ public class SoftClaimsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        getLogger().info("Saving block info...");
-        getBlockDurabilityService().persistAll();
+        getLogger().info("Saving durability info...");
+        try {
+            getBlockDurabilityService().persistAll().get();
+        } catch (InterruptedException | ExecutionException ignored) {
+        }
 
         getLogger().info("Soft Claims disabled!");
     }
@@ -119,6 +126,7 @@ public class SoftClaimsPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new ExplosionHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new RightClickHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new ChunkLoadHandler(this), this);
+        Bukkit.getPluginManager().registerEvents(this.blockRepairService, this);
     }
 
     public ProtocolManager getProtocolManager() {

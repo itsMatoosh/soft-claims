@@ -13,7 +13,7 @@ public interface IFactionImplementation {
 
     /**
      * Gets the list of factions on the server.
-     * @return
+     * @return The list of factions.
      */
     List<String> getFactions();
 
@@ -43,7 +43,8 @@ public interface IFactionImplementation {
 
     /**
      * Lists all chunks claimed by factions.
+     * @param factionName The faction to get chunks for.
      * @return All chunks claimed by factions.
      */
-    List<Chunk> getAllFactionChunks();
+    List<Chunk> getAllFactionChunks(String factionName);
 }

@@ -50,10 +50,29 @@ public class FactionService {
     }
 
     /**
+     * Gets the list of factions on the server.
+     * @return The list of factions.
+     */
+    public List<String> getFactions() {
+        return factionImplementation.getFactions();
+    }
+
+    /**
+     * Attempts to charge a faction the given price.
+     * @param factionName The name of the faction.
+     * @param price The price to charge.
+     * @return Whether the faction could pay the price.
+     */
+    public boolean chargeFaction(String factionName, double price) {
+        return factionImplementation.chargeFaction(factionName, price);
+    }
+
+    /**
      * Lists all chunks claimed by factions.
+     * @param factionName The faction to get chunks for.
      * @return All chunks claimed by factions.
      */
-    public List<Chunk> getAllFactionChunks() {
-        return factionImplementation.getAllFactionChunks();
+    public List<Chunk> getAllFactionChunks(String factionName) {
+        return factionImplementation.getAllFactionChunks(factionName);
     }
 }
