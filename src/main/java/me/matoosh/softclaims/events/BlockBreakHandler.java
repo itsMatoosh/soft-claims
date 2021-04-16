@@ -1,5 +1,6 @@
 package me.matoosh.softclaims.events;
 
+import com.comphenix.protocol.wrappers.BlockPosition;
 import com.destroystokyo.paper.event.block.BlockDestroyEvent;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.ChunkBusyException;
@@ -61,7 +62,8 @@ public class BlockBreakHandler implements Listener {
                 event.setCancelled(true);
 
                 // apply fatigue to fix fast pickaxe problem
-                plugin.getDiggersHandler().applyFatigue(event.getPlayer());
+                plugin.getDiggersHandler().onStartDigging(
+                        new BlockPosition(block.getX(), block.getY(), block.getZ()), event.getPlayer());
             }
         } else {
             // still in the process of breaking
@@ -75,9 +77,7 @@ public class BlockBreakHandler implements Listener {
     @EventHandler
     public void onBlockDestroy(BlockDestroyEvent event) {
         // block durable blocks from getting destroyed by environment
-        if (plugin.getBlockDurabilityService().hasDurability(event.getBlock())) {
-            event.setCancelled(true);
-        }
+        plugin.getBlockDurabilityService().clearDurability(event.getBlock());
     }
 
     @EventHandler

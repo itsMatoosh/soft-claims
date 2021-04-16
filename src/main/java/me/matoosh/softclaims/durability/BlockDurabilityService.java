@@ -5,11 +5,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import me.matoosh.softclaims.async.AsyncFiles;
 import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.javaync.io.AsyncFiles;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -379,7 +379,7 @@ public class BlockDurabilityService {
      */
     private CompletableFuture<Map<String, Map<String, Double>>> readRegionData(Path regionFile) {
         // read file text
-        return AsyncFiles.readAll(regionFile).thenApplyAsync(content -> {
+        return AsyncFiles.readAll(regionFile, 1024).thenApplyAsync(content -> {
             // parse file
             try {
                 return mapper.readValue(
@@ -455,7 +455,7 @@ public class BlockDurabilityService {
 
         // read current region data
         return readRegionData(regionFilePath)
-        .exceptionallyAsync((e) ->{
+        .exceptionally((e) ->{
             // error reading file
             // possibly doesnt exist
             return null;
@@ -493,7 +493,7 @@ public class BlockDurabilityService {
 
             return data;
         }).thenCompose((data) -> writeRegionData(regionFilePath, data))
-        .exceptionallyAsync((e) -> {
+        .exceptionally((e) -> {
             // error writing chunk data
             // not busy
             e.printStackTrace();
@@ -527,7 +527,7 @@ public class BlockDurabilityService {
             return getRegionFile(chunk);
         })
         .thenCompose(this::readRegionData)
-        .exceptionallyAsync((e) -> {
+        .exceptionally((e) -> {
             // error loading chunk data
             // not busy
             busyChunks.remove(chunk);

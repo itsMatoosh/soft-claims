@@ -16,14 +16,14 @@ public class ChunkLoadHandler implements Listener {
 
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
-        if(plugin.getConfig().getStringList("disabledWorlds")
+        if (plugin.getConfig().getStringList("disabledWorlds")
                 .contains(event.getWorld().getName())) return;
         plugin.getBlockDurabilityService().loadChunk(event.getChunk());
     }
 
     @EventHandler
     public void onChunkUnload(ChunkUnloadEvent event) {
-        if(plugin.getConfig().getStringList("disabledWorlds")
+        if (plugin.getConfig().getStringList("disabledWorlds")
                 .contains(event.getWorld().getName())) return;
         plugin.getBlockDurabilityService().persistChunk(event.getChunk(), true);
     }

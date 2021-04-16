@@ -7,10 +7,7 @@ import me.matoosh.softclaims.commands.SoftClaimsCommand;
 import me.matoosh.softclaims.durability.BlockDurabilityService;
 import me.matoosh.softclaims.durability.BlockRepairService;
 import me.matoosh.softclaims.durability.CommunicationService;
-import me.matoosh.softclaims.events.ChunkLoadHandler;
-import me.matoosh.softclaims.events.DiggersHandler;
-import me.matoosh.softclaims.events.ExplosionHandler;
-import me.matoosh.softclaims.events.RightClickHandler;
+import me.matoosh.softclaims.events.*;
 import me.matoosh.softclaims.faction.FactionService;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -126,6 +123,7 @@ public class SoftClaimsPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new ExplosionHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new RightClickHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new ChunkLoadHandler(this), this);
+        Bukkit.getPluginManager().registerEvents(new BlockBreakHandler(this), this);
         Bukkit.getPluginManager().registerEvents(this.blockRepairService, this);
     }
 

@@ -66,7 +66,7 @@ public class DiggersHandler implements PacketListener, Listener {
     /**
      * Called when a player starts digging.
      */
-    private void onStartDigging(BlockPosition position, Player player) {
+    public void onStartDigging(BlockPosition position, Player player) {
         // get block
         Block block = player.getWorld().getBlockAt(position.getX(), position.getY(), position.getZ());
 
