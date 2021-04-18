@@ -91,9 +91,16 @@ public class SoftClaimsPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         getLogger().info("Saving durability info...");
-        try {
-            getBlockDurabilityService().persistAll().get();
-        } catch (InterruptedException | ExecutionException ignored) {
+
+        // save remaining loaded chunks
+        for (World world : Bukkit.getWorlds()) {
+            for(Chunk chunk : world.getLoadedChunks()) {
+                try {
+                    getBlockDurabilityService().persistChunk(chunk, true).get();
+                } catch (InterruptedException | ExecutionException e) {
+                    e.printStackTrace();
+                }
+            }
         }
 
         getLogger().info("Soft Claims disabled!");

@@ -18,8 +18,6 @@ import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 public class BlockDurabilityService {
@@ -29,24 +27,27 @@ public class BlockDurabilityService {
     /**
      * Durabilities of each block grouped by chunk.
      */
-    private final ConcurrentMap<Chunk, Map<String, Double>> durabilities
-            = new ConcurrentHashMap<>();
+    private final Map<Chunk, Map<String, Double>> durabilities
+            = new HashMap<>();
     /**
      * Chunks that are currently being loaded/persisted.
      */
-    private final Set<Chunk> busyChunks =
-            Collections.synchronizedSet(new HashSet<>());
+    private final Set<Chunk> busyChunks = new HashSet<>();
+
     /**
      * Regions that are currently being loaded/persisted and their load futures.
      */
-    private final ConcurrentMap<String, CompletableFuture<Void>> busyRegions
-            = new ConcurrentHashMap<>();
+    private final Map<String, CompletableFuture<Void>> busyRegions = new HashMap<>();
 
     /**
      * Chain of futures used for loading/persisting regions.
      */
-    private final Set<CompletableFuture<Void>> regionFutureChain =
-            Collections.synchronizedSet(new HashSet<>());
+    private final Set<CompletableFuture<Void>> regionFutureChain = new HashSet<>();
+
+    /**
+     * Names of the region files available to load.
+     */
+    private Set<String> regionFilesCache;
 
     /**
      * YAML data file mapper.
@@ -54,14 +55,10 @@ public class BlockDurabilityService {
     private final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
 
     public BlockDurabilityService(SoftClaimsPlugin plugin) {
+        // save plugin reference
         this.plugin = plugin;
-        initialize();
-    }
 
-    /**
-     * Initialize the data.
-     */
-    private void initialize() {
+        // ensure durabilities folder exists
         Path dataPath = getDurabilitiesFolder();
         if (!Files.exists(dataPath)) {
             try {
@@ -69,6 +66,16 @@ public class BlockDurabilityService {
             } catch (IOException exception) {
                 exception.printStackTrace();
             }
+        }
+
+        // cache names of existing region files
+        try {
+            regionFilesCache = Files.list(dataPath)
+                    .map((path) -> path.getFileName().toString())
+                    .collect(Collectors.toSet());
+        } catch (IOException exception) {
+            regionFilesCache = new HashSet<>();
+            exception.printStackTrace();
         }
     }
 
@@ -101,12 +108,6 @@ public class BlockDurabilityService {
         if (durability <= 0 || durability >= 1) {
             clearDurability(block);
         } else {
-            // check if block durable
-            if (!hasDurability(block)) {
-                clearDurability(block);
-                return;
-            }
-
             durabilities.computeIfAbsent(
                     block.getChunk(), k -> new HashMap<>())
                     .put(getBlockKeyInChunk(block), durability);
@@ -343,8 +344,8 @@ public class BlockDurabilityService {
         // schedule operation
         CompletableFuture<Void> newFuture;
         if (lastFuture != null) {
-            // append future
-            newFuture = lastFuture.thenComposeAsync(task);
+            // append future and run it on the same tread as last one
+            newFuture = lastFuture.thenCompose(task);
 
             // add last future as chained
             regionFutureChain.add(lastFuture);
@@ -357,12 +358,9 @@ public class BlockDurabilityService {
 
         // append clean up task after the task is done
         CompletableFuture<Void> finalNewFuture = newFuture;
-        newFuture.thenRunAsync(() -> {
-            if (regionFutureChain.contains(finalNewFuture)) {
-                // there is the next future chained after this one
-                // only remove chain reference
-                regionFutureChain.remove(finalNewFuture);
-            } else {
+        newFuture.thenRun(() -> {
+            // check if there is a next future after this one
+            if (!regionFutureChain.remove(finalNewFuture)) {
                 // there is no task scheduled after this one for now
                 // clear the region record
                 busyRegions.remove(regionKey);
@@ -378,17 +376,21 @@ public class BlockDurabilityService {
      * @return Map of region durability data.
      */
     private CompletableFuture<Map<String, Map<String, Double>>> readRegionData(Path regionFile) {
+        // no file to read
+        if (regionFile == null) {
+            return CompletableFuture.completedFuture(null);
+        }
         // read file text
-        return AsyncFiles.readAll(regionFile, 1024).thenApplyAsync(content -> {
-            // parse file
-            try {
-                return mapper.readValue(
-                        content, new TypeReference<Map<String, Map<String, Double>>>(){});
-            } catch (JsonProcessingException e) {
-                e.printStackTrace();
-                throw new CompletionException(e);
-            }
-        });
+        return AsyncFiles.readAll(regionFile, 1024)
+            .thenApply(content -> {
+                // parse file
+                try {
+                    return mapper.readValue(
+                            content, new TypeReference<Map<String, Map<String, Double>>>(){});
+                } catch (JsonProcessingException e) {
+                    throw new CompletionException(e);
+                }
+            });
     }
 
     /**
@@ -405,9 +407,14 @@ public class BlockDurabilityService {
             } catch (IOException ignored) {
                 return false;
             }
-        }).thenApplyAsync((s) -> {
+        }).thenApply((s) -> {
             // serialize to yaml
-            if (data == null) return null;
+            if (data == null) {
+                regionFilesCache.remove(regionFile.getFileName().toString());
+                return null;
+            } else {
+                regionFilesCache.add(regionFile.getFileName().toString());
+            }
             try {
                 return mapper.writeValueAsString(data);
             } catch (JsonProcessingException e) {
@@ -418,17 +425,6 @@ public class BlockDurabilityService {
                 ? AsyncFiles.writeBytes(regionFile, content.getBytes(),
                 StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW)
                 : CompletableFuture.completedFuture(0));
-    }
-
-    /**
-     * Persists all loaded block data.
-     */
-    public CompletableFuture<Void> persistAll() {
-        return CompletableFuture.allOf(
-                durabilities.keySet().stream()
-                        .map((chunk -> persistChunk(chunk, false)))
-                        .toArray(CompletableFuture[]::new)
-        );
     }
 
     /**
@@ -447,20 +443,28 @@ public class BlockDurabilityService {
      * @param unload Whether the chunk should be unloaded from memory.
      */
     private CompletableFuture<Void> persistChunkAsync(Chunk chunk, boolean unload) {
-        // set busy
-        busyChunks.add(chunk);
+        return CompletableFuture.supplyAsync(() -> {
+            // set busy
+            busyChunks.add(chunk);
 
-        // get region path
-        Path regionFilePath = getRegionFile(chunk);
+            // get appropriate file
+            Path file = getRegionFile(chunk);
 
-        // read current region data
-        return readRegionData(regionFilePath)
+            // check if file exists
+            if (!regionFilesCache.contains(file.getFileName().toString())) {
+                return null;
+            } else {
+                return file;
+            }
+        })
+        .thenCompose(this::readRegionData)
         .exceptionally((e) ->{
             // error reading file
             // possibly doesnt exist
+            e.printStackTrace();
             return null;
         })
-        .thenApplyAsync((data) -> {
+        .thenApply((data) -> {
             // get chunk data
             Map<String, Double> chunkDurabilities;
             if(unload) {
@@ -473,7 +477,7 @@ public class BlockDurabilityService {
             String chunkSection = getChunkKey(chunk);
             if (data != null) {
                 // durabilities already stored for this region, append
-                if (chunkDurabilities == null) {
+                if (chunkDurabilities == null || chunkDurabilities.size() == 0) {
                     // no durabilities to save for this chunk, remove entry from region
                     data.remove(chunkSection);
                 } else {
@@ -492,14 +496,15 @@ public class BlockDurabilityService {
             }
 
             return data;
-        }).thenCompose((data) -> writeRegionData(regionFilePath, data))
+        })
+        .thenCompose((data) -> writeRegionData(getRegionFile(chunk), data))
         .exceptionally((e) -> {
             // error writing chunk data
             // not busy
             e.printStackTrace();
             return null;
         })
-        .thenAcceptAsync((data) -> {
+        .thenAccept((data) -> {
             // not busy
             busyChunks.remove(chunk);
         });
@@ -524,18 +529,28 @@ public class BlockDurabilityService {
             busyChunks.add(chunk);
 
             // get appropriate file
-            return getRegionFile(chunk);
+            Path file = getRegionFile(chunk);
+
+            // check if file exists
+            if (!regionFilesCache.contains(file.getFileName().toString())) {
+                return null;
+            } else {
+                return file;
+            }
         })
         .thenCompose(this::readRegionData)
         .exceptionally((e) -> {
             // error loading chunk data
             // not busy
-            busyChunks.remove(chunk);
+            e.printStackTrace();
             return null;
         })
-        .thenAcceptAsync((data) -> {
+        .thenAccept((data) -> {
             // check if load was successful
-            if (data == null) return;
+            if (data == null) {
+                busyChunks.remove(chunk);
+                return;
+            }
 
             // load
             String chunkSection = getChunkKey(chunk);
