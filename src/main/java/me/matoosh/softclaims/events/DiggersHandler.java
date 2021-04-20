@@ -12,6 +12,7 @@ import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
@@ -27,6 +28,8 @@ import org.bukkit.potion.PotionEffectType;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class DiggersHandler implements PacketListener, Listener {
     private final SoftClaimsPlugin plugin;
@@ -98,7 +101,7 @@ public class DiggersHandler implements PacketListener, Listener {
         int toolPower = 1;
         int toolEfficiency = 0;
         if (tool.getAmount() > 0) {
-            toolPower = (int)block.getDestroySpeed(tool);
+            toolPower = (int)block.getDestroySpeed(tool, true);
             toolEfficiency = tool.removeEnchantment(Enchantment.DIG_SPEED);
         }
 
@@ -133,7 +136,7 @@ public class DiggersHandler implements PacketListener, Listener {
             onStopDigging(player);
 
             // break block
-            digProgress.getBlock().breakNaturally(tool, true);
+            digProgress.getBlock().breakNaturally(tool);
         } else {
             // update progress
             setDigProgress(player,
@@ -258,6 +261,19 @@ public class DiggersHandler implements PacketListener, Listener {
      */
     public boolean isDigging(Player player) {
         return diggers.containsKey(player.getEntityId());
+    }
+
+    /**
+     * Gets players around a location.
+     * @param location Location around which to find players.
+     * @param distance Max distance around the location.
+     * @return List of players around the location within the specified distance.
+     */
+    public List<Player> getNearbyPlayers(Location location, int distance) {
+        int distSquared = distance * distance;
+        return Bukkit.getOnlinePlayers().parallelStream().filter(
+                (p) -> p.getLocation().distanceSquared(location) < distSquared)
+                .collect(Collectors.toList());
     }
 
     /**

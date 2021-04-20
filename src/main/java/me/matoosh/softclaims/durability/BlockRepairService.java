@@ -1,6 +1,5 @@
 package me.matoosh.softclaims.durability;
 
-import com.destroystokyo.paper.event.server.ServerTickStartEvent;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Bukkit;
@@ -8,16 +7,17 @@ import org.bukkit.Chunk;
 import org.bukkit.Particle;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
 
-import java.util.*;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 
-public class BlockRepairService implements Listener {
+public class BlockRepairService {
     /**
      * List of recently healed blocks.
      */
@@ -28,7 +28,7 @@ public class BlockRepairService implements Listener {
      */
     private final SoftClaimsPlugin plugin;
 
-    private static final int ANIMATIONS_PER_TICK = 10;
+    private static final int ANIMATIONS_PER_TICK = 15;
 
     public BlockRepairService(SoftClaimsPlugin plugin) {
         this.plugin = plugin;
@@ -41,6 +41,7 @@ public class BlockRepairService implements Listener {
         int frequency = 20 * plugin.getConfig().getInt("repair.repairFrequency", 300);
         Bukkit.getScheduler().runTaskTimerAsynchronously(
                 plugin, this::repairBlocksTask, frequency, frequency);
+        Bukkit.getScheduler().runTaskTimer(plugin, this::repairTick, 10, 10);
     }
 
     /**
@@ -84,34 +85,41 @@ public class BlockRepairService implements Listener {
         }
     }
 
-    @EventHandler
-    public void onTick(ServerTickStartEvent event) {
-        if (event.getTickNumber() % 5 == 0) {
-            int i = 0;
-            Iterator<Map.Entry<Chunk, Queue<int[]>>> iter = healedBlocks.entrySet().iterator();
-            while (iter.hasNext() && i < ANIMATIONS_PER_TICK) {
-                // get blocks in chunk to animate
-                Map.Entry<Chunk, Queue<int[]>> entry = iter.next();
-                Queue<int[]> blocks = entry.getValue();
+    /**
+     * Called every 10 ticks.
+     * Shows block animations for healed blocks.
+     */
+    public void repairTick() {
+        // check if healed blocks empty
+        if (healedBlocks.size() == 0) {
+            return;
+        }
 
-                // spawn particles
-                while (blocks.size() > 0 && i < ANIMATIONS_PER_TICK) {
-                    doHealAnimation(entry.getKey(), blocks.remove());
-                    i++;
-                }
+        // animate blocks
+        int i = 0;
+        Iterator<Map.Entry<Chunk, Queue<int[]>>> iter = healedBlocks.entrySet().iterator();
+        while (iter.hasNext() && i < ANIMATIONS_PER_TICK) {
+            // get blocks in chunk to animate
+            Map.Entry<Chunk, Queue<int[]>> entry = iter.next();
+            Queue<int[]> blocks = entry.getValue();
 
-                // remove handled chunks
-                if (blocks.size() == 0) {
-                    iter.remove();
-                }
+            // spawn particles
+            while (blocks.size() > 0 && i < ANIMATIONS_PER_TICK) {
+                doHealAnimation(entry.getKey(), blocks.remove());
+                i++;
+            }
+
+            // remove handled chunks
+            if (blocks.size() == 0) {
+                iter.remove();
             }
         }
     }
 
     /**
      * Do a heal animation at block.
-     * @param chunk
-     * @param position
+     * @param chunk The chunk to do the heal animation in.
+     * @param position The position of the block in the chunk to animate.
      */
     private void doHealAnimation(Chunk chunk, int[] position) {
         Block b = chunk.getBlock(position[0], position[1], position[2]);
@@ -123,6 +131,11 @@ public class BlockRepairService implements Listener {
         }
     }
 
+    /**
+     * Gets a block face from the block face number.
+     * @param i block face number.
+     * @return The block face.
+     */
     private BlockFace blockFaceFromInt(int i) {
         switch(i) {
             default:

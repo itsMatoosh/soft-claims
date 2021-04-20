@@ -1,6 +1,7 @@
 package me.matoosh.softclaims.events;
 
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.world.ChunkLoadEvent;
@@ -16,11 +17,21 @@ public class ChunkLoadHandler implements Listener {
 
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
-        plugin.getBlockDurabilityService().loadChunk(event.getChunk());
+        if (event.isAsynchronous()) {
+            Bukkit.getScheduler().runTask(plugin,
+                    () -> plugin.getBlockDurabilityService().getDurabilityStorage().loadChunk(event.getChunk()));
+        } else {
+            plugin.getBlockDurabilityService().getDurabilityStorage().loadChunk(event.getChunk());
+        }
     }
 
     @EventHandler
     public void onChunkUnload(ChunkUnloadEvent event) {
-        plugin.getBlockDurabilityService().persistChunk(event.getChunk(), true);
+        if (event.isAsynchronous()) {
+            Bukkit.getScheduler().runTask(plugin,
+                    () -> plugin.getBlockDurabilityService().getDurabilityStorage().persistChunk(event.getChunk(), true));
+        } else {
+            plugin.getBlockDurabilityService().getDurabilityStorage().persistChunk(event.getChunk(), true);
+        }
     }
 }

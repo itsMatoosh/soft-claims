@@ -1,82 +1,31 @@
 package me.matoosh.softclaims.durability;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import me.matoosh.softclaims.SoftClaimsPlugin;
-import me.matoosh.softclaims.async.AsyncFiles;
 import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 public class BlockDurabilityService {
 
+    /**
+     * Plugin reference.
+     */
     private final SoftClaimsPlugin plugin;
 
     /**
-     * Durabilities of each block grouped by chunk.
+     * Reference to the durabilities storage service.
      */
-    private final Map<Chunk, Map<String, Double>> durabilities
-            = new HashMap<>();
-    /**
-     * Chunks that are currently being loaded/persisted.
-     */
-    private final Set<Chunk> busyChunks = new HashSet<>();
-
-    /**
-     * Regions that are currently being loaded/persisted and their load futures.
-     */
-    private final Map<String, CompletableFuture<Void>> busyRegions = new HashMap<>();
-
-    /**
-     * Chain of futures used for loading/persisting regions.
-     */
-    private final Set<CompletableFuture<Void>> regionFutureChain = new HashSet<>();
-
-    /**
-     * Names of the region files available to load.
-     */
-    private Set<String> regionFilesCache;
-
-    /**
-     * YAML data file mapper.
-     */
-    private final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+    private final BlockDurabilityStorageService durabilityStorage;
 
     public BlockDurabilityService(SoftClaimsPlugin plugin) {
         // save plugin reference
         this.plugin = plugin;
-
-        // ensure durabilities folder exists
-        Path dataPath = getDurabilitiesFolder();
-        if (!Files.exists(dataPath)) {
-            try {
-                Files.createDirectory(dataPath);
-            } catch (IOException exception) {
-                exception.printStackTrace();
-            }
-        }
-
-        // cache names of existing region files
-        try {
-            regionFilesCache = Files.list(dataPath)
-                    .map((path) -> path.getFileName().toString())
-                    .collect(Collectors.toSet());
-        } catch (IOException exception) {
-            regionFilesCache = new HashSet<>();
-            exception.printStackTrace();
-        }
+        // create durabilities storage
+        this.durabilityStorage = new BlockDurabilityStorageService(this.plugin);
     }
 
     /**
@@ -99,17 +48,11 @@ public class BlockDurabilityService {
         // check if value is correct
         if (!Double.isFinite(durability)) return;
 
-        // check if chunk busy
-        if (isChunkBusy(block.getChunk())) {
-            throw new ChunkBusyException();
-        }
-
         // set durability to be in 0 - 1 range.
         if (durability <= 0 || durability >= 1) {
             clearDurability(block);
         } else {
-            durabilities.computeIfAbsent(
-                    block.getChunk(), k -> new HashMap<>())
+            durabilityStorage.modifyDurabilitiesInChunk(block.getChunk())
                     .put(getBlockKeyInChunk(block), durability);
         }
     }
@@ -126,18 +69,17 @@ public class BlockDurabilityService {
         // check if delta is correct
         if (!Double.isFinite(delta)) return Collections.emptyList();
 
-        // check if chunk busy
-        if (isChunkBusy(chunk)) {
-            throw new ChunkBusyException();
+        // check if there are any durabilities in chunk
+        if (!durabilityStorage.hasDurabilitiesForChunk(chunk)) {
+            return Collections.emptyList();
         }
 
         // get chunk inner map
-        Map<String, Double> innerMap = durabilities.get(chunk);
-        if (innerMap == null) return Collections.emptyList();
+        Map<String, Double> durabilities = durabilityStorage.modifyDurabilitiesInChunk(chunk);
 
         // modify all durabilities
-        List<String> modified = new ArrayList<>(innerMap.entrySet().size());
-        Iterator<Map.Entry<String, Double>> iter = innerMap.entrySet().iterator();
+        List<String> modified = new ArrayList<>(durabilities.entrySet().size());
+        Iterator<Map.Entry<String, Double>> iter = durabilities.entrySet().iterator();
         while (iter.hasNext()) {
             // get current durability
             Map.Entry<String, Double> entry = iter.next();
@@ -173,18 +115,13 @@ public class BlockDurabilityService {
      * @throws ChunkBusyException thrown if the chunk is busy.
      */
     public int countDamagedInChunk(Chunk chunk) throws ChunkBusyException {
-        // check if chunk busy
-        if (isChunkBusy(chunk)) {
-            throw new ChunkBusyException();
+        // check if chunk has durabilities
+        if (!durabilityStorage.hasDurabilitiesForChunk(chunk)) {
+            return 0;
         }
 
-        // get chunk inner map
-        Map<String, Double> innerMap = durabilities.get(chunk);
-        if (innerMap == null) {
-            return 0;
-        } else {
-            return innerMap.size();
-        }
+        // get chunk durabilities
+        return durabilityStorage.getDurabilitiesInChunk(chunk).size();
     }
 
     /**
@@ -214,22 +151,19 @@ public class BlockDurabilityService {
             return 0d;
         }
 
-        // check if chunk busy
-        if (isChunkBusy(block.getChunk())) {
-            throw new ChunkBusyException();
-        }
-
-        // get chunk
+        // check if chunk has durabilities
         Chunk chunk = block.getChunk();
-        Map<String, Double> innerMap = durabilities.get(chunk);
-        if (innerMap == null) {
+        if (!durabilityStorage.hasDurabilitiesForChunk(chunk)) {
             // no data stored for the chunk
             // default to total durability
             return 1d;
         }
 
+        // get chunk
+        Map<String, Double> durabilities = durabilityStorage.getDurabilitiesInChunk(chunk);
+
         // get position in the inner map
-        Double durability = innerMap.get(getBlockKeyInChunk(block));
+        Double durability = durabilities.get(getBlockKeyInChunk(block));
         if (durability == null) {
             // no data stored for the block
             // default to total durability
@@ -238,6 +172,85 @@ public class BlockDurabilityService {
         return durability;
     }
 
+    /**
+     * Gets whether the block has durability.
+     * @param block The block.
+     * @return Whether the block has durability.
+     */
+    public boolean hasDurability(Block block) {
+        // check if this world is disabled
+        if (plugin.getConfig().getStringList("disabledWorlds")
+                .contains(block.getWorld().getName())) {
+            return false;
+        }
+        // check if block has durability set
+        if (!plugin.getConfig().contains("blocks." + block.getType().name() + ".durability")) {
+            return false;
+        }
+        // check if block is in a faction chunk
+        return plugin.getFactionService().isInFactionLand(block.getChunk());
+    }
+
+    /**
+     * Clears all durability data in a chunk.
+     * @param chunk The chunk.
+     */
+    public void clearDurabilitiesInChunk(Chunk chunk) throws ChunkBusyException {
+        durabilityStorage.removeDurabilitiesForChunk(chunk);
+    }
+
+    /**
+     * Clears durability of a block.
+     * @param block The block.
+     */
+    public void clearDurability(Block block)
+            throws ChunkBusyException {
+        // cache chunk
+        Chunk chunk = block.getChunk();
+
+        // check if there are durabilities in the chunk
+        if (!durabilityStorage.hasDurabilitiesForChunk(chunk)) {
+            return;
+        }
+
+        // get chunk
+        Map<String, Double> durabilityMap = durabilityStorage
+                .modifyDurabilitiesInChunk(chunk);
+
+        // get position in inner map
+        durabilityMap.remove(getBlockKeyInChunk(block));
+
+        // check if last value
+        if (durabilityMap.size() < 1) {
+            // remove chunk from storage
+            durabilityStorage.removeDurabilitiesForChunk(chunk);
+        }
+    }
+
+    /**
+     * Gets a list of damaged blocks within a chunk.
+     * @param chunk The chunk.
+     * @return A list of damaged blocks within the chunk.
+     * @throws ChunkBusyException Thrown if the chunks is busy.
+     */
+    public List<DamagedBlock> getDamagedBlocksInChunk(Chunk chunk)
+            throws ChunkBusyException {
+        // check if there are durabilities in chunk
+        if (durabilityStorage.hasDurabilitiesForChunk(chunk)) {
+            return Collections.emptyList();
+        }
+        // get damaged blocks in chunk
+        return durabilityStorage.getDurabilitiesInChunk(chunk)
+            .entrySet().parallelStream().map((entry) -> {
+                String[] position = entry.getKey().split(",");
+                return new DamagedBlock(
+                        chunk.getBlock(Integer.parseInt(position[0]),
+                                Integer.parseInt(position[1]),
+                                Integer.parseInt(position[2])),
+                        entry.getValue()
+                );
+        }).collect(Collectors.toList());
+    }
     /**
      * Gets relative durability of a block
      * given its absolute durability.
@@ -273,353 +286,6 @@ public class BlockDurabilityService {
                 + material.name() + ".durability", 0);
     }
 
-    /**
-     * Gets whether the given durable block should drop when broken.
-     * @param block The block.
-     * @return Whether the block should drop when broken.
-     */
-    public boolean getBlockDrops(Block block) {
-        return plugin.getConfig().getBoolean("blocks."
-                + block.getType().name() + ".drop", false);
-    }
-
-    /**
-     * Gets whether the block has durability.
-     * @param block The block.
-     * @return Whether the block has durability.
-     */
-    public boolean hasDurability(Block block) {
-        // check if this world is disabled
-        if (plugin.getConfig().getStringList("disabledWorlds")
-                .contains(block.getWorld().getName())) {
-            return false;
-        }
-        // check if block has durability set
-        if (!plugin.getConfig().contains("blocks." + block.getType().name() + ".durability")) {
-            return false;
-        }
-        // check if block is in a faction chunk
-        if (!plugin.getFactionService().isInFactionLand(block.getChunk())) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Clears durability of a block.
-     * @param block The block.
-     */
-    public void clearDurability(Block block) {
-        // get chunk
-        Chunk chunk = block.getChunk();
-        Map<String, Double> innerMap = durabilities.get(chunk);
-        if (innerMap == null) return; // not present
-
-        // get position in inner map
-        innerMap.remove(getBlockKeyInChunk(block));
-
-        // check if last value
-        if (innerMap.size() < 1) {
-            // remove inner map
-            durabilities.remove(chunk);
-        }
-    }
-
-    /**
-     * Schedules a region task.
-     * Region tasks are executed asynchronously,
-     * but only 1 task can run for a single region
-     * at any time.
-     * @param chunk Chunk which is in the region which we want to schedule a task for.
-     * @param task The task to be scheduled.
-     * @return Future of the task.
-     */
-    private CompletableFuture<Void> scheduleRegionTask(Chunk chunk, java.util.function.Function
-            <Void, ? extends java.util.concurrent.CompletableFuture<Void>> task) {
-        // check if region is busy
-        String regionKey = getRegionKey(chunk);
-        CompletableFuture<Void> lastFuture = busyRegions.get(regionKey);
-
-        // schedule operation
-        CompletableFuture<Void> newFuture;
-        if (lastFuture != null) {
-            // append future and run it on the same tread as last one
-            newFuture = lastFuture.thenCompose(task);
-
-            // add last future as chained
-            regionFutureChain.add(lastFuture);
-        } else {
-            // first future in the chain
-            newFuture = task.apply(null);
-        }
-        // set this future as the latest future for the region
-        busyRegions.put(regionKey, newFuture);
-
-        // append clean up task after the task is done
-        CompletableFuture<Void> finalNewFuture = newFuture;
-        newFuture.thenRun(() -> {
-            // check if there is a next future after this one
-            if (!regionFutureChain.remove(finalNewFuture)) {
-                // there is no task scheduled after this one for now
-                // clear the region record
-                busyRegions.remove(regionKey);
-            }
-        });
-
-        return newFuture;
-    }
-
-    /**
-     * Reads region durability data.
-     * @param regionFile Path to the region file.
-     * @return Map of region durability data.
-     */
-    private CompletableFuture<Map<String, Map<String, Double>>> readRegionData(Path regionFile) {
-        // no file to read
-        if (regionFile == null) {
-            return CompletableFuture.completedFuture(null);
-        }
-        // read file text
-        return AsyncFiles.readAll(regionFile, 1024)
-            .thenApply(content -> {
-                // parse file
-                try {
-                    return mapper.readValue(
-                            content, new TypeReference<Map<String, Map<String, Double>>>(){});
-                } catch (JsonProcessingException e) {
-                    throw new CompletionException(e);
-                }
-            });
-    }
-
-    /**
-     * Reads region durability data.
-     * @param regionFile Path to the region file.
-     * @return Map of region durability data.
-     */
-    private CompletableFuture<Integer> writeRegionData(
-            Path regionFile, Map<String, Map<String, Double>> data) {
-        // remove old file to overwrite
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                return Files.deleteIfExists(regionFile);
-            } catch (IOException ignored) {
-                return false;
-            }
-        }).thenApply((s) -> {
-            // serialize to yaml
-            if (data == null) {
-                regionFilesCache.remove(regionFile.getFileName().toString());
-                return null;
-            } else {
-                regionFilesCache.add(regionFile.getFileName().toString());
-            }
-            try {
-                return mapper.writeValueAsString(data);
-            } catch (JsonProcessingException e) {
-                throw new CompletionException(e);
-            }
-        })
-        .thenCompose((content) -> content != null
-                ? AsyncFiles.writeBytes(regionFile, content.getBytes(),
-                StandardOpenOption.WRITE, StandardOpenOption.CREATE_NEW)
-                : CompletableFuture.completedFuture(0));
-    }
-
-    /**
-     * Persists chunk durability data on disk.
-     * @param chunk The chunk to persist.
-     * @param unload Whether the chunk should be unloaded from memory.
-     */
-    public CompletableFuture<Void> persistChunk(Chunk chunk, boolean unload) {
-        // save chunk asynchronously
-        return scheduleRegionTask(chunk, (s) -> persistChunkAsync(chunk, unload));
-    }
-
-    /**
-     * Persists chunk durability data on disk asynchronously.
-     * @param chunk The chunk to persist.
-     * @param unload Whether the chunk should be unloaded from memory.
-     */
-    private CompletableFuture<Void> persistChunkAsync(Chunk chunk, boolean unload) {
-        return CompletableFuture.supplyAsync(() -> {
-            // set busy
-            busyChunks.add(chunk);
-
-            // get appropriate file
-            Path file = getRegionFile(chunk);
-
-            // check if file exists
-            if (!regionFilesCache.contains(file.getFileName().toString())) {
-                return null;
-            } else {
-                return file;
-            }
-        })
-        .thenCompose(this::readRegionData)
-        .exceptionally((e) ->{
-            // error reading file
-            // possibly doesnt exist
-            e.printStackTrace();
-            return null;
-        })
-        .thenApply((data) -> {
-            // get chunk data
-            Map<String, Double> chunkDurabilities;
-            if(unload) {
-                chunkDurabilities = durabilities.remove(chunk);
-            } else {
-                chunkDurabilities = durabilities.get(chunk);
-            }
-
-            // update data
-            String chunkSection = getChunkKey(chunk);
-            if (data != null) {
-                // durabilities already stored for this region, append
-                if (chunkDurabilities == null || chunkDurabilities.size() == 0) {
-                    // no durabilities to save for this chunk, remove entry from region
-                    data.remove(chunkSection);
-                } else {
-                    // update durabilities for this chunk
-                    data.put(chunkSection, chunkDurabilities);
-                }
-            } else if (chunkDurabilities != null) {
-                // no durabilities stored for this region yet, create new map
-                data = new HashMap<>();
-                data.put(chunkSection, chunkDurabilities);
-            }
-
-            // delete empty region files
-            if (data != null && data.size() == 0) {
-                data = null;
-            }
-
-            return data;
-        })
-        .thenCompose((data) -> writeRegionData(getRegionFile(chunk), data))
-        .exceptionally((e) -> {
-            // error writing chunk data
-            // not busy
-            e.printStackTrace();
-            return null;
-        })
-        .thenAccept((data) -> {
-            // not busy
-            busyChunks.remove(chunk);
-        });
-    }
-
-    /**
-     * Loads chunk durability data into memory.
-     * @param chunk The chunk.
-     */
-    public CompletableFuture<Void> loadChunk(Chunk chunk) {
-        // load chunk asynchronously
-        return scheduleRegionTask(chunk, (s) -> loadChunkAsync(chunk));
-    }
-
-    /**
-     * Loads chunk durability data into memory synchronously.
-     * @param chunk The chunk.
-     */
-    private CompletableFuture<Void> loadChunkAsync(Chunk chunk) {
-        return CompletableFuture.supplyAsync(() ->{
-            // set busy
-            busyChunks.add(chunk);
-
-            // get appropriate file
-            Path file = getRegionFile(chunk);
-
-            // check if file exists
-            if (!regionFilesCache.contains(file.getFileName().toString())) {
-                return null;
-            } else {
-                return file;
-            }
-        })
-        .thenCompose(this::readRegionData)
-        .exceptionally((e) -> {
-            // error loading chunk data
-            // not busy
-            e.printStackTrace();
-            return null;
-        })
-        .thenAccept((data) -> {
-            // check if load was successful
-            if (data == null) {
-                busyChunks.remove(chunk);
-                return;
-            }
-
-            // load
-            String chunkSection = getChunkKey(chunk);
-            Map<String, Double> chunkData = data.get(chunkSection);
-            if (chunkData != null) {
-                durabilities.put(chunk, chunkData);
-            }
-
-            // not busy
-            busyChunks.remove(chunk);
-        });
-    }
-
-    /**
-     * Gets a list of damaged blocks within a chunk.
-     * @param chunk The chunk.
-     * @return A list of damaged blocks within the chunk.
-     * @throws ChunkBusyException Thrown if the chunks is busy.
-     */
-    public List<DamagedBlock> getDamagedBlocksInChunk(Chunk chunk)
-            throws ChunkBusyException {
-        // check if chunk is busy
-        if (isChunkBusy(chunk)) throw new ChunkBusyException();
-        // get damaged blocks in chunk
-        Map<String, Double> damagedInChunk = durabilities.get(chunk);
-        if (damagedInChunk == null) return Collections.emptyList();
-        // get a list of damaged blocks
-        return damagedInChunk.entrySet().parallelStream().map((entry) -> {
-            String[] position = entry.getKey().split(",");
-            return new DamagedBlock(
-                    chunk.getBlock(Integer.parseInt(position[0]),
-                            Integer.parseInt(position[1]),
-                            Integer.parseInt(position[2])),
-                    entry.getValue()
-            );
-        }).collect(Collectors.toList());
-    }
-
-    /**
-     * Damaged block information.
-     */
-    public class DamagedBlock {
-        private final Block block;
-        private final double durability;
-
-        public DamagedBlock(Block block, double durability) {
-            this.block = block;
-            this.durability = durability;
-        }
-
-        public Block getBlock() {
-            return block;
-        }
-
-        public double getDurability() {
-            return durability;
-        }
-    }
-
-    /**
-     * Clears all durability data in a chunk.
-     * @param chunk The chunk.
-     */
-    public void clearDurabilitiesInChunk(Chunk chunk)
-            throws ChunkBusyException {
-        // check if chunk is busy
-        if (isChunkBusy(chunk)) throw new ChunkBusyException();
-        durabilities.remove(chunk);
-    }
 
     /**
      * Gets a key unique for a block in a chunk.
@@ -646,47 +312,27 @@ public class BlockDurabilityService {
     }
 
     /**
-     * Get a key unique to a region in which a chunk is located.
-     * @param chunk The chunk in the region.
-     * @return The region key.
+     * Damaged block information.
      */
-    public String getRegionKey(Chunk chunk) {
-        return (chunk.getX() / 16) + "_" + (chunk.getZ() / 16);
+    public static class DamagedBlock {
+        private final Block block;
+        private final double durability;
+
+        public DamagedBlock(Block block, double durability) {
+            this.block = block;
+            this.durability = durability;
+        }
+
+        public Block getBlock() {
+            return block;
+        }
+
+        public double getDurability() {
+            return durability;
+        }
     }
 
-    /**
-     * Get a key unique to a chunk within a durabilities region file.
-     * @param chunk The chunk.
-     * @return The chunk key.
-     */
-    public String getChunkKey(Chunk chunk) {
-        return chunk.getX() + "," + chunk.getZ();
-    }
-
-    /**
-     * Checks whether the specified chunk is busy.
-     * A chunk is busy if it's being loaded/unloaded.
-     * @param chunk The chunk.
-     * @return Whether the chunk is busy.
-     */
-    public boolean isChunkBusy(Chunk chunk) {
-        return busyChunks.contains(chunk);
-    }
-
-    /**
-     * Get file name under which a region file should be saved.
-     * @param chunk The chunk in the saved region.
-     * @return The file name.
-     */
-    public Path getRegionFile(Chunk chunk) {
-        return getDurabilitiesFolder().resolve(chunk.getWorld().getName() + "_" + getRegionKey(chunk) + ".yml");
-    }
-
-    /**
-     * Get path to the durabilities folder.
-     * @return
-     */
-    public Path getDurabilitiesFolder() {
-        return plugin.getDataFolder().toPath().resolve("data");
+    public BlockDurabilityStorageService getDurabilityStorage() {
+        return durabilityStorage;
     }
 }

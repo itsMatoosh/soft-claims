@@ -118,7 +118,7 @@ public class ExplosionHandler implements Listener {
 
                 // calculate damage to block based on distance
                 // to the center of the explosion
-                double dist = location.distance(b.getLocation().toCenterLocation()) - 1;
+                double dist = location.distance(b.getLocation().add(0.5, 0.5, 0.5)) - 1;
                 // 2 and 0.7 ensure that explosion 1 block away from the block
                 // damaged the block with the full power. Explosions inside of the
                 // block will result in double the power being exerted.
@@ -132,7 +132,11 @@ public class ExplosionHandler implements Listener {
                     }
                 } else {
                     // block exploded
-                    plugin.getBlockDurabilityService().clearDurability(b);
+                    try {
+                        plugin.getBlockDurabilityService().clearDurability(b);
+                    } catch (ChunkBusyException ignored) {
+                        // cant happen cause the chunk must be loaded for explosion
+                    }
                     destroyedBlocks.add(b);
                 }
             }

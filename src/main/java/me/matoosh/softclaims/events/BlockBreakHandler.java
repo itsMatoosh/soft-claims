@@ -75,7 +75,7 @@ public class BlockBreakHandler implements Listener {
     }
 
     @EventHandler
-    public void onBlockDestroy(BlockDestroyEvent event) {
+    public void onBlockDestroy(BlockDestroyEvent event) throws ChunkBusyException {
         // block durable blocks from getting destroyed by environment
         plugin.getBlockDurabilityService().clearDurability(event.getBlock());
     }
@@ -91,13 +91,13 @@ public class BlockBreakHandler implements Listener {
     }
 
     @EventHandler
-    public void onBlockBurn(BlockBurnEvent event) {
+    public void onBlockBurn(BlockBurnEvent event) throws ChunkBusyException {
         // clear durability
         plugin.getBlockDurabilityService().clearDurability(event.getBlock());
     }
 
     @EventHandler
-    public void onBlockFade(BlockFadeEvent event) {
+    public void onBlockFade(BlockFadeEvent event) throws ChunkBusyException {
         // clear durability
         plugin.getBlockDurabilityService().clearDurability(event.getBlock());
     }

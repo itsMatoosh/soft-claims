@@ -2,142 +2,96 @@
 blocks:
   BARREL:
     durability: 200
-    drop: true
   CHEST:
     durability: 300
-    drop: true
   OAK_PLANKS:
     durability: 500
-    drop: true
   SPRUCE_PLANKS:
     durability: 500
-    drop: true
   BIRCH_PLANKS:
     durability: 500
-    drop: true
   JUNGLE_PLANKS:
     durability: 500
-    drop: true
   ACACIA_PLANKS:
     durability: 500
-    drop: true
   DARK_OAK_PLANKS:
     durability: 500
-    drop: true
   CRIMSON_PLANKS:
     durability: 500
-    drop: true
   WARPED_PLANKS:
     durability: 500
-    drop: true
   STONECUTTER:
     durability: 700
-    drop: true
   COBWEB:
     durability: 500
-    drop: true
   STONE:
     durability: 200
-    drop: true
   DIRT:
     durability: 500
-    drop: true
   STRIPPED_OAK_LOG:
     durability: 2500
-    drop: true
   STRIPPED_SPRUCE_LOG:
     durability: 2500
-    drop: true
   STRIPPED_BIRCH_LOG:
     durability: 2500
-    drop: true
   STRIPPED_JUNGLE_LOG:
     durability: 2500
-    drop: true
   STRIPPED_ACACIA_LOG:
     durability: 2500
-    drop: true
   STRIPPED_DARK_OAK_LOG:
     durability: 2500
-    drop: true
   STRIPPED_CRIMSON_STEM:
     durability: 2500
-    drop: true
   STRIPPED_WARPED_STEM:
     durability: 2500
-    drop: true
   SPRUCE_DOOR:
     durability: 2000
-    drop: true
   BIRCH_DOOR:
     durability: 2000
-    drop: true
   JUNGLE_DOOR:
     durability: 2000
-    drop: true
   ACACIA_DOOR:
     durability: 2000
-    drop: true
   DARK_OAK_DOOR:
     durability: 2000
-    drop: true
   CRIMSON_DOOR:
     durability: 2000
-    drop: true
   WARPED_DOOR:
     durability: 2000
-    drop: true
   OAK_TRAPDOOR:
     durability: 2000
-    drop: true
   SPRUCE_TRAPDOOR:
     durability: 2000
-    drop: true
   BIRCH_TRAPDOOR:
     durability: 2000
-    drop: true
   JUNGLE_TRAPDOOR:
     durability: 2000
-    drop: true
   ACACIA_TRAPDOOR:
     durability: 2000
-    drop: true
   DARK_OAK_TRAPDOOR:
     durability: 2000
-    drop: true
   CRIMSON_TRAPDOOR:
     durability: 2000
-    drop: true
   WARPED_TRAPDOOR:
     durability: 2000
-    drop: true
   SMOOTH_STONE_SLAB:
     durability: 2000
-    drop: false
   SMOOTH_STONE:
     durability: 4000
-    drop: false
   IRON_DOOR:
     durability: 7000
-    drop: false
   IRON_TRAPDOOR:
     durability: 7000
-    drop: false
   IRON_BLOCK:
     durability: 8000
-    drop: false
   BRICKS:
     durability: 10000
-    drop: false
   OBSIDIAN:
     durability: 12000
-    drop: false
   ANCIENT_DEBRIS:
     durability: 12000
-    drop: false
   CRYING_OBSIDIAN:
     durability: 30000
-    drop: false
 
 # the damage that an explosion will do to adjacent durable blocks
 explosionDamage:

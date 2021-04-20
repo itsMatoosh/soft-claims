@@ -12,9 +12,7 @@ import me.matoosh.softclaims.faction.FactionService;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.World;
-import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.plugin.java.JavaPluginLoader;
 import org.bukkit.plugin.java.annotation.dependency.Dependency;
 import org.bukkit.plugin.java.annotation.dependency.SoftDependency;
 import org.bukkit.plugin.java.annotation.plugin.ApiVersion;
@@ -23,7 +21,9 @@ import org.bukkit.plugin.java.annotation.plugin.Plugin;
 import org.bukkit.plugin.java.annotation.plugin.Website;
 import org.bukkit.plugin.java.annotation.plugin.author.Author;
 
-import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 @Plugin(name = "SoftClaims", version = "1.7")
@@ -41,14 +41,6 @@ public class SoftClaimsPlugin extends JavaPlugin {
     private final CommunicationService communicationService = new CommunicationService();
     private final FactionService factionService = new FactionService(this);
     private final BlockRepairService blockRepairService = new BlockRepairService(this);
-
-    public SoftClaimsPlugin() {
-        super();
-    }
-
-    protected SoftClaimsPlugin(JavaPluginLoader loader, PluginDescriptionFile description, File dataFolder, File file) {
-        super(loader, description, dataFolder, file);
-    }
 
     @Override
     public void onEnable() {
@@ -68,14 +60,16 @@ public class SoftClaimsPlugin extends JavaPlugin {
         this.blockRepairService.initialize();
 
         // load data
+        List<CompletableFuture<Void>> tasks = new ArrayList<>();
         for (World world : Bukkit.getWorlds()) {
             for(Chunk chunk : world.getLoadedChunks()) {
-                try {
-                    getBlockDurabilityService().loadChunk(chunk).get();
-                } catch (InterruptedException | ExecutionException e) {
-                    e.printStackTrace();
-                }
+                tasks.add(getBlockDurabilityService().getDurabilityStorage().loadChunk(chunk));
             }
+        }
+        try {
+            CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).get();
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
         }
 
         getLogger().info("Soft Claims enabled!");
@@ -90,19 +84,20 @@ public class SoftClaimsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        getLogger().info("Disabling SoftClaims...");
         getLogger().info("Saving durability info...");
-
         // save remaining loaded chunks
+        List<CompletableFuture<Void>> tasks = new ArrayList<>();
         for (World world : Bukkit.getWorlds()) {
             for(Chunk chunk : world.getLoadedChunks()) {
-                try {
-                    getBlockDurabilityService().persistChunk(chunk, true).get();
-                } catch (InterruptedException | ExecutionException e) {
-                    e.printStackTrace();
-                }
+                tasks.add(getBlockDurabilityService().getDurabilityStorage().persistChunk(chunk, true));
             }
         }
-
+        try {
+            CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).get();
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+        }
         getLogger().info("Soft Claims disabled!");
     }
 
@@ -131,7 +126,6 @@ public class SoftClaimsPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new RightClickHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new ChunkLoadHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new BlockBreakHandler(this), this);
-        Bukkit.getPluginManager().registerEvents(this.blockRepairService, this);
     }
 
     public ProtocolManager getProtocolManager() {
