@@ -6,6 +6,9 @@ import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -19,13 +22,24 @@ public class BlockDurabilityService {
     /**
      * Reference to the durabilities storage service.
      */
-    private final BlockDurabilityStorageService durabilityStorage;
+    private final BlockMetadataStorage<Double> durabilityStorage;
 
     public BlockDurabilityService(SoftClaimsPlugin plugin) {
         // save plugin reference
         this.plugin = plugin;
+
+        // get data folder
+        Path durabilitiesDataDir = plugin.getDataFolder().toPath().resolve("data");
+        if (!Files.exists(durabilitiesDataDir)) {
+            try {
+                Files.createDirectories(durabilitiesDataDir);
+            } catch (IOException exception) {
+                exception.printStackTrace();
+            }
+        }
+
         // create durabilities storage
-        this.durabilityStorage = new BlockDurabilityStorageService(this.plugin);
+        this.durabilityStorage = new BlockMetadataStorage<>(durabilitiesDataDir);
     }
 
     /**
@@ -52,8 +66,7 @@ public class BlockDurabilityService {
         if (durability <= 0 || durability >= 1) {
             clearDurability(block);
         } else {
-            durabilityStorage.modifyDurabilitiesInChunk(block.getChunk())
-                    .put(getBlockKeyInChunk(block), durability);
+            durabilityStorage.setMetadata(block, durability);
         }
     }
 
@@ -70,12 +83,12 @@ public class BlockDurabilityService {
         if (!Double.isFinite(delta)) return Collections.emptyList();
 
         // check if there are any durabilities in chunk
-        if (!durabilityStorage.hasDurabilitiesForChunk(chunk)) {
+        if (!durabilityStorage.hasMetadataForChunk(chunk)) {
             return Collections.emptyList();
         }
 
         // get chunk inner map
-        Map<String, Double> durabilities = durabilityStorage.modifyDurabilitiesInChunk(chunk);
+        Map<String, Double> durabilities = durabilityStorage.modifyMetadataInChunk(chunk);
 
         // modify all durabilities
         List<String> modified = new ArrayList<>(durabilities.entrySet().size());
@@ -115,13 +128,12 @@ public class BlockDurabilityService {
      * @throws ChunkBusyException thrown if the chunk is busy.
      */
     public int countDamagedInChunk(Chunk chunk) throws ChunkBusyException {
-        // check if chunk has durabilities
-        if (!durabilityStorage.hasDurabilitiesForChunk(chunk)) {
+        // get durabilities for chunk
+        Map<String, Double> metadata = durabilityStorage.getMetadataInChunk(chunk);
+        if (metadata == null) {
             return 0;
         }
-
-        // get chunk durabilities
-        return durabilityStorage.getDurabilitiesInChunk(chunk).size();
+        return metadata.size();
     }
 
     /**
@@ -151,19 +163,8 @@ public class BlockDurabilityService {
             return 0d;
         }
 
-        // check if chunk has durabilities
-        Chunk chunk = block.getChunk();
-        if (!durabilityStorage.hasDurabilitiesForChunk(chunk)) {
-            // no data stored for the chunk
-            // default to total durability
-            return 1d;
-        }
-
-        // get chunk
-        Map<String, Double> durabilities = durabilityStorage.getDurabilitiesInChunk(chunk);
-
-        // get position in the inner map
-        Double durability = durabilities.get(getBlockKeyInChunk(block));
+        // get block durability
+        Double durability = durabilityStorage.getMetadata(block);
         if (durability == null) {
             // no data stored for the block
             // default to total durability
@@ -196,35 +197,15 @@ public class BlockDurabilityService {
      * @param chunk The chunk.
      */
     public void clearDurabilitiesInChunk(Chunk chunk) throws ChunkBusyException {
-        durabilityStorage.removeDurabilitiesForChunk(chunk);
+        durabilityStorage.removeMetadataForChunk(chunk);
     }
 
     /**
      * Clears durability of a block.
      * @param block The block.
      */
-    public void clearDurability(Block block)
-            throws ChunkBusyException {
-        // cache chunk
-        Chunk chunk = block.getChunk();
-
-        // check if there are durabilities in the chunk
-        if (!durabilityStorage.hasDurabilitiesForChunk(chunk)) {
-            return;
-        }
-
-        // get chunk
-        Map<String, Double> durabilityMap = durabilityStorage
-                .modifyDurabilitiesInChunk(chunk);
-
-        // get position in inner map
-        durabilityMap.remove(getBlockKeyInChunk(block));
-
-        // check if last value
-        if (durabilityMap.size() < 1) {
-            // remove chunk from storage
-            durabilityStorage.removeDurabilitiesForChunk(chunk);
-        }
+    public void clearDurability(Block block) throws ChunkBusyException {
+        durabilityStorage.removeMetadata(block);
     }
 
     /**
@@ -236,11 +217,11 @@ public class BlockDurabilityService {
     public List<DamagedBlock> getDamagedBlocksInChunk(Chunk chunk)
             throws ChunkBusyException {
         // check if there are durabilities in chunk
-        if (durabilityStorage.hasDurabilitiesForChunk(chunk)) {
+        if (durabilityStorage.hasMetadataForChunk(chunk)) {
             return Collections.emptyList();
         }
         // get damaged blocks in chunk
-        return durabilityStorage.getDurabilitiesInChunk(chunk)
+        return durabilityStorage.getMetadataInChunk(chunk)
             .entrySet().parallelStream().map((entry) -> {
                 String[] position = entry.getKey().split(",");
                 return new DamagedBlock(
@@ -288,30 +269,6 @@ public class BlockDurabilityService {
 
 
     /**
-     * Gets a key unique for a block in a chunk.
-     * @param block The block for which to get the key.
-     * @return The key.
-     */
-    public String getBlockKeyInChunk(Block block) {
-        Chunk chunk = block.getChunk();
-        return getBlockKeyInChunk(
-                block.getX() - chunk.getX() * 16,
-                block.getY(),
-                block.getZ() - chunk.getZ() * 16);
-    }
-
-    /**
-     * Gets a key unique for a block in a chunk.
-     * @param x X coordinate of the block relative to the chunk.
-     * @param y Y coordinate of the block.
-     * @param z Z coordinate of the block relative to the chunk.
-     * @return The key.
-     */
-    public String getBlockKeyInChunk(int x, int y, int z) {
-        return x + "," + y + "," + z;
-    }
-
-    /**
      * Damaged block information.
      */
     public static class DamagedBlock {
@@ -332,7 +289,7 @@ public class BlockDurabilityService {
         }
     }
 
-    public BlockDurabilityStorageService getDurabilityStorage() {
+    public BlockMetadataStorage<Double> getDurabilityStorage() {
         return durabilityStorage;
     }
 }

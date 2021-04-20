@@ -4,10 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.async.AsyncFiles;
 import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Chunk;
+import org.bukkit.block.Block;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,20 +22,20 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 /**
- * Service managing block durability storage on disk.
+ * Service managing the storage of block metadata.
+ * @param <T> The type of metadata to store.
  */
-public class BlockDurabilityStorageService {
+public class BlockMetadataStorage<T> {
 
     /**
-     * Plugin reference.
+     * Path of the data folder.
      */
-    private final SoftClaimsPlugin plugin;
+    private final Path dataPath;
 
     /**
-     * Durabilities of each block grouped by chunk.
+     * Currently loaded metadata of each block grouped by chunk.
      */
-    private final Map<Chunk, Map<String, Double>> durabilities
-            = new HashMap<>();
+    private final Map<Chunk, Map<String, T>> metadata = new HashMap<>();
 
     /**
      * Regions that are currently being loaded/persisted and their load futures.
@@ -48,78 +48,122 @@ public class BlockDurabilityStorageService {
     private final Set<Chunk> busyChunks = new HashSet<>();
 
     /**
-     * Chunks which have had their durabilities modified since they were loaded.
+     * Chunks which have had their metadata modified since they were loaded.
      */
-    private Set<Chunk> dirtyChunks = new HashSet<>();
+    private final Set<Chunk> dirtyChunks = new HashSet<>();
 
     /**
      * YAML data file mapper.
      */
     private final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
 
-    public BlockDurabilityStorageService(SoftClaimsPlugin plugin) {
-        this.plugin = plugin;
+    public BlockMetadataStorage(Path dataPath) {
+        this.dataPath = dataPath;
+    }
 
-        // ensure durabilities folder exists
-        Path dataPath = getDurabilitiesFolder();
-        if (!Files.exists(dataPath)) {
-            try {
-                Files.createDirectory(dataPath);
-            } catch (IOException exception) {
-                exception.printStackTrace();
-            }
+    /**
+     * Get metadata of a block.
+     * @param block The block.
+     * @return Current metadata of the block. Null if no data stored.
+     */
+    public T getMetadata(Block block) throws ChunkBusyException {
+        if (block == null) return null;
+
+        // get chunk
+        Map<String, T> metadata = getMetadataInChunk(block.getChunk());
+        if (metadata == null) {
+            // no data for this chunk
+            return null;
+        }
+
+        // get block metadata
+        return metadata.get(getBlockKeyInChunk(block));
+    }
+
+    /**
+     * Set metadata of a block.
+     * @param block The block.
+     * @param metadata Metadata to set to the block.
+     */
+    public void setMetadata(Block block, T metadata) throws ChunkBusyException {
+        modifyMetadataInChunk(block.getChunk()).put(getBlockKeyInChunk(block), metadata);
+    }
+
+    /**
+     * Removes metadata for a block.
+     * @param block The block.
+     */
+    public void removeMetadata(Block block) throws ChunkBusyException {
+        // cache chunk
+        Chunk chunk = block.getChunk();
+
+        // check if there are durabilities in the chunk
+        if (!hasMetadataForChunk(chunk)) {
+            return;
+        }
+
+        // get chunk
+        Map<String, T> metadata = modifyMetadataInChunk(chunk);
+
+        // remove from map
+        metadata.remove(getBlockKeyInChunk(block));
+
+        // check if last value
+        if (metadata.size() < 1) {
+            // remove chunk from storage
+            removeMetadataForChunk(chunk);
         }
     }
 
     /**
-     * Checks whether there are durabilities stored for a given chunk.
+     * Checks whether there are metadata stored for a given chunk.
      * @param chunk The chunk to check.
-     * @return Whethrer there are durabilities stored for the given chunk.
+     * @return Whether there are metadata stored for the given chunk.
      * @throws ChunkBusyException thrown if the chunk is busy.
      */
-    public boolean hasDurabilitiesForChunk(Chunk chunk)
+    public boolean hasMetadataForChunk(Chunk chunk)
             throws ChunkBusyException {
         if (isChunkBusy(chunk)) throw new ChunkBusyException();
-        return durabilities.containsKey(chunk);
+        return metadata.containsKey(chunk);
     }
 
     /**
-     * Removes all durabilities stored for a given chunk.
-     * @param chunk The chunk to remove durabilities from.
+     * Removes all metadata stored for a given chunk.
+     * @param chunk The chunk to remove metadata from.
      * @throws ChunkBusyException thrown if the chunk is busy.
      */
-    public void removeDurabilitiesForChunk(Chunk chunk)
+    public void removeMetadataForChunk(Chunk chunk)
             throws ChunkBusyException {
         if (isChunkBusy(chunk)) throw new ChunkBusyException();
-        durabilities.remove(chunk);
+        metadata.remove(chunk);
         dirtyChunks.add(chunk);
     }
 
     /**
-     * Gets durabilities of blocks in a chunk to be modified.
+     * Gets metadata of blocks in a chunk to be modified.
      * Sets the chunk as dirty.
-     * @param chunk The chunk in which the durabilities are.
-     * @return Map of durabilities.
+     * @param chunk The chunk in which the metadata are.
+     * @return Map of metadata.
      * @throws ChunkBusyException thrown if the chunk is busy.
      */
-    public Map<String, Double> modifyDurabilitiesInChunk(Chunk chunk)
+    public Map<String, T> modifyMetadataInChunk(Chunk chunk)
             throws ChunkBusyException {
         if (isChunkBusy(chunk)) throw new ChunkBusyException();
-        Map<String, Double> data = durabilities.computeIfAbsent(chunk, k -> new HashMap<>());
+        Map<String, T> data = metadata.computeIfAbsent(chunk, k -> new HashMap<>());
         dirtyChunks.add(chunk);
         return data;
     }
 
     /**
-     * Gets durabilities of blocks in a chunk.
-     * @param chunk The chunk in which the durabilities are.
-     * @return Map of durabilities.
+     * Gets metadata of blocks in a chunk.
+     * @param chunk The chunk in which the metadata are.
+     * @return Map of metadata.
      * @throws ChunkBusyException thrown if the chunk is busy.
      */
-    public Map<String, Double> getDurabilitiesInChunk(Chunk chunk)
+    public Map<String, T> getMetadataInChunk(Chunk chunk)
             throws ChunkBusyException {
         if (isChunkBusy(chunk)) throw new ChunkBusyException();
-        return durabilities.get(chunk);
+        return metadata.get(chunk);
     }
 
     /**
@@ -198,11 +242,11 @@ public class BlockDurabilityStorageService {
     }
 
     /**
-     * Reads region durability data.
+     * Reads metadata stored for a region.
      * @param regionFile Path to the region file.
-     * @return Map of region durability data.
+     * @return Map of region metadata.
      */
-    private CompletableFuture<Map<String, Map<String, Double>>> readRegionData(Path regionFile) {
+    private CompletableFuture<Map<String, Map<String, T>>> readRegionData(Path regionFile) {
         // no file to read
         if (regionFile == null) {
             return CompletableFuture.completedFuture(null);
@@ -224,8 +268,8 @@ public class BlockDurabilityStorageService {
                 .thenApply(content -> {
                     try {
                         // parse file
-                        Map<String, Map<String, Double>> data = mapper.readValue(
-                                content, new TypeReference<Map<String, Map<String, Double>>>(){});
+                        Map<String, Map<String, T>> data = mapper.readValue(
+                                content, new TypeReference<Map<String, Map<String, T>>>(){});
 
                         // buffer data
                         if (task != null) {
@@ -247,7 +291,7 @@ public class BlockDurabilityStorageService {
      * @return The number of bytes that were written to disk.
      */
     private CompletableFuture<Void> bufferRegionData(
-            Path regionFile, Map<String, Map<String, Double>> data) {
+            Path regionFile, Map<String, Map<String, T>> data) {
         RegionTask regionTask = busyRegions.get(regionFile);
         if (regionTask != null) {
             regionTask.setBuffer(data);
@@ -265,7 +309,7 @@ public class BlockDurabilityStorageService {
      * @return The number of bytes that were written to disk.
      */
     private CompletableFuture<Void> writeRegionData(
-            Path regionFile, Map<String, Map<String, Double>> data) {
+            Path regionFile, Map<String, Map<String, T>> data) {
 //        plugin.getLogger().info("Writing region data: " + regionFile);
 
         // remove old file to overwrite
@@ -289,7 +333,7 @@ public class BlockDurabilityStorageService {
     }
 
     /**
-     * Persists chunk durability data on disk.
+     * Persists chunk metadata on disk.
      * @param chunk The chunk to persist.
      * @param unload Whether the chunk should be unloaded from memory.
      */
@@ -303,7 +347,7 @@ public class BlockDurabilityStorageService {
     }
 
     /**
-     * Persists chunk durability data on disk asynchronously.
+     * Persists chunk metadata on disk asynchronously.
      * @param chunk The chunk to persist.
      * @param unload Whether the chunk should be unloaded from memory.
      */
@@ -324,28 +368,28 @@ public class BlockDurabilityStorageService {
             })
             .thenApply((data) -> {
                 // get chunk data
-                Map<String, Double> chunkDurabilities;
+                Map<String, T> chunkMetadata;
                 if(unload) {
-                    chunkDurabilities = durabilities.remove(chunk);
+                    chunkMetadata = metadata.remove(chunk);
                 } else {
-                    chunkDurabilities = durabilities.get(chunk);
+                    chunkMetadata = metadata.get(chunk);
                 }
 
                 // update data
                 String chunkSection = getChunkKey(chunk);
                 if (data != null) {
-                    // durabilities already stored for this region, append
-                    if (chunkDurabilities == null || chunkDurabilities.size() == 0) {
-                        // no durabilities to save for this chunk, remove entry from region
+                    // metadata already stored for this region, append
+                    if (chunkMetadata == null || chunkMetadata.size() == 0) {
+                        // no metadata to save for this chunk, remove entry from region
                         data.remove(chunkSection);
                     } else {
-                        // update durabilities for this chunk
-                        data.put(chunkSection, chunkDurabilities);
+                        // update metadata for this chunk
+                        data.put(chunkSection, chunkMetadata);
                     }
-                } else if (chunkDurabilities != null) {
-                    // no durabilities stored for this region yet, create new map
+                } else if (chunkMetadata != null) {
+                    // no metadata stored for this region yet, create new map
                     data = new HashMap<>();
-                    data.put(chunkSection, chunkDurabilities);
+                    data.put(chunkSection, chunkMetadata);
                 }
 
                 // delete empty region files
@@ -365,7 +409,7 @@ public class BlockDurabilityStorageService {
     }
 
     /**
-     * Loads chunk durability data into memory.
+     * Loads chunk metadata into memory.
      * @param chunk The chunk.
      */
     public CompletableFuture<Void> loadChunk(Chunk chunk) {
@@ -374,7 +418,7 @@ public class BlockDurabilityStorageService {
     }
 
     /**
-     * Loads chunk durability data into memory synchronously.
+     * Loads chunk metadata into memory synchronously.
      * @param chunk The chunk.
      */
     private CompletableFuture<Void> loadChunkAsync(Chunk chunk) {
@@ -401,9 +445,9 @@ public class BlockDurabilityStorageService {
 
                     // load
                     String chunkSection = getChunkKey(chunk);
-                    Map<String, Double> chunkData = data.get(chunkSection);
+                    Map<String, T> chunkData = data.get(chunkSection);
                     if (chunkData != null) {
-                        durabilities.put(chunk, chunkData);
+                        metadata.put(chunk, chunkData);
                     }
 
                     // not busy
@@ -421,7 +465,7 @@ public class BlockDurabilityStorageService {
     }
 
     /**
-     * Get a key unique to a chunk within a durabilities region file.
+     * Get a key unique to a chunk within a metadata region file.
      * @param chunk The chunk.
      * @return The chunk key.
      */
@@ -445,24 +489,40 @@ public class BlockDurabilityStorageService {
      * @return The file name.
      */
     public Path getRegionFile(Chunk chunk) {
-        return getDurabilitiesFolder().resolve(chunk.getWorld().getName() + "_" + getRegionKey(chunk) + ".yml");
+        return dataPath.resolve(chunk.getWorld().getName() + "_" + getRegionKey(chunk) + ".yml");
     }
 
     /**
-     * Get path to the durabilities folder.
-     * @return Path to the durabilities folder.
+     * Gets a key unique for a block in a chunk.
+     * @param block The block for which to get the key.
+     * @return The key.
      */
-    public Path getDurabilitiesFolder() {
-        return plugin.getDataFolder().toPath().resolve("data");
+    public static String getBlockKeyInChunk(Block block) {
+        Chunk chunk = block.getChunk();
+        return getBlockKeyInChunk(
+                block.getX() - chunk.getX() * 16,
+                block.getY(),
+                block.getZ() - chunk.getZ() * 16);
+    }
+
+    /**
+     * Gets a key unique for a block in a chunk.
+     * @param x X coordinate of the block relative to the chunk.
+     * @param y Y coordinate of the block.
+     * @param z Z coordinate of the block relative to the chunk.
+     * @return The key.
+     */
+    public static String getBlockKeyInChunk(int x, int y, int z) {
+        return x + "," + y + "," + z;
     }
 
     /**
      * Represents a busy region.
      */
-    public static class RegionTask {
+    public class RegionTask {
         private CompletableFuture<Void> task;
         private CompletableFuture<Boolean> cleanupTask;
-        private Map<String, Map<String, Double>> buffer;
+        private Map<String, Map<String, T>> buffer;
         private boolean dirty;
         private boolean buffered;
 
@@ -478,11 +538,11 @@ public class BlockDurabilityStorageService {
             this.task = task;
         }
 
-        public Map<String, Map<String, Double>> getBuffer() {
+        public Map<String, Map<String, T>> getBuffer() {
             return buffer;
         }
 
-        public void setBuffer(Map<String, Map<String, Double>> buffer) {
+        public void setBuffer(Map<String, Map<String, T>> buffer) {
             this.buffer = buffer;
         }
 
