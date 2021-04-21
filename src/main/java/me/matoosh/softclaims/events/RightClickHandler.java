@@ -1,7 +1,7 @@
 package me.matoosh.softclaims.events;
 
+import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
-import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;

@@ -2,8 +2,8 @@ package me.matoosh.softclaims.events;
 
 import com.comphenix.protocol.wrappers.BlockPosition;
 import com.destroystokyo.paper.event.block.BlockDestroyEvent;
+import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
-import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;

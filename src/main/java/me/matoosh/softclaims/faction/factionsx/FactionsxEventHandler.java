@@ -1,8 +1,8 @@
 package me.matoosh.softclaims.faction.factionsx;
 
+import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.durability.BlockDurabilityService;
-import me.matoosh.softclaims.exception.ChunkBusyException;
 import net.prosavage.factionsx.event.FactionUnClaimEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;

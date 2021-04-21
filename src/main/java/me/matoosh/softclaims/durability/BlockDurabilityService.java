@@ -1,13 +1,12 @@
 package me.matoosh.softclaims.durability;
 
+import me.matoosh.blockmetadata.BlockMetadataStorage;
+import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
-import me.matoosh.softclaims.exception.ChunkBusyException;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -30,16 +29,9 @@ public class BlockDurabilityService {
 
         // get data folder
         Path durabilitiesDataDir = plugin.getDataFolder().toPath().resolve("data");
-        if (!Files.exists(durabilitiesDataDir)) {
-            try {
-                Files.createDirectories(durabilitiesDataDir);
-            } catch (IOException exception) {
-                exception.printStackTrace();
-            }
-        }
 
         // create durabilities storage
-        this.durabilityStorage = new BlockMetadataStorage<>(durabilitiesDataDir);
+        this.durabilityStorage = new BlockMetadataStorage<>(plugin, durabilitiesDataDir);
     }
 
     /**

@@ -7,7 +7,10 @@ import me.matoosh.softclaims.commands.SoftClaimsCommand;
 import me.matoosh.softclaims.durability.BlockDurabilityService;
 import me.matoosh.softclaims.durability.BlockRepairService;
 import me.matoosh.softclaims.durability.CommunicationService;
-import me.matoosh.softclaims.events.*;
+import me.matoosh.softclaims.events.BlockBreakHandler;
+import me.matoosh.softclaims.events.DiggersHandler;
+import me.matoosh.softclaims.events.ExplosionHandler;
+import me.matoosh.softclaims.events.RightClickHandler;
 import me.matoosh.softclaims.faction.FactionService;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -37,7 +40,7 @@ public class SoftClaimsPlugin extends JavaPlugin {
 
     private ProtocolManager protocolManager;
     private DiggersHandler diggersHandler;
-    private final BlockDurabilityService blockDurabilityService = new BlockDurabilityService(this);
+    private BlockDurabilityService blockDurabilityService;
     private final CommunicationService communicationService = new CommunicationService();
     private final FactionService factionService = new FactionService(this);
     private final BlockRepairService blockRepairService = new BlockRepairService(this);
@@ -52,6 +55,9 @@ public class SoftClaimsPlugin extends JavaPlugin {
 
         // register events
         registerEvents();
+
+        // init block durability service
+        blockDurabilityService = new BlockDurabilityService(this);
 
         // init faction service
         this.factionService.initialize();
@@ -124,7 +130,6 @@ public class SoftClaimsPlugin extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(diggersHandler, this);
         Bukkit.getPluginManager().registerEvents(new ExplosionHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new RightClickHandler(this), this);
-        Bukkit.getPluginManager().registerEvents(new ChunkLoadHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new BlockBreakHandler(this), this);
     }
 
