@@ -1,4 +1,4 @@
-package me.matoosh.softclaims.durability;
+package me.matoosh.softclaims.service;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;

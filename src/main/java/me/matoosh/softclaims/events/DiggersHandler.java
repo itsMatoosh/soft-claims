@@ -77,7 +77,7 @@ public class DiggersHandler implements PacketListener, Listener {
         // allow fast-break if the player
         // has appropriate faction perms
         if (plugin.getFactionService().canPlayerDestroyInFaction(
-                player.getUniqueId(), block.getChunk())) {
+                player, block.getChunk())) {
             return;
         }
 

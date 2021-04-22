@@ -5,7 +5,7 @@ import com.destroystokyo.paper.event.block.BlockDestroyEvent;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
-import me.matoosh.softclaims.durability.BlockDurabilityService;
+import me.matoosh.softclaims.service.BlockDurabilityService;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -52,7 +52,7 @@ public class BlockBreakHandler implements Listener {
         if (!plugin.getDiggersHandler().isDigging(event.getPlayer())) {
             // check faction aspect
             if (plugin.getFactionService().canPlayerDestroyInFaction(
-                    event.getPlayer().getUniqueId(), block.getChunk())) {
+                    event.getPlayer(), block.getChunk())) {
                 // allow fast break for people with special faction perms
                 event.setCancelled(false);
 

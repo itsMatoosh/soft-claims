@@ -4,7 +4,7 @@ import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.MSG;
 import me.matoosh.softclaims.SoftClaimsPlugin;
-import me.matoosh.softclaims.durability.BlockDurabilityService;
+import me.matoosh.softclaims.service.BlockDurabilityService;
 import net.prosavage.factionsx.event.FactionPreClaimEvent;
 import net.prosavage.factionsx.event.FactionUnClaimEvent;
 import org.bukkit.event.EventHandler;

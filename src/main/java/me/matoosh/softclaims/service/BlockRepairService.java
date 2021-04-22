@@ -1,48 +1,80 @@
-package me.matoosh.softclaims.durability;
+package me.matoosh.softclaims.service;
 
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import me.matoosh.softclaims.faction.Faction;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Particle;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.scheduler.BukkitTask;
 
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 
-public class BlockRepairService {
+/**
+ * Manages automatic repair of blocks based on the faction power.
+ */
+public class BlockRepairService implements IReloadable {
+
+    private final SoftClaimsPlugin plugin;
+
     /**
-     * List of recently healed blocks.
+     * Number of healed blocks that should be animated per each animation tick.
+     */
+    private static final int ANIMATIONS_PER_TICK = 15;
+
+    /**
+     * List of recently healed blocks for
+     * which a heal animation is still due.
      */
     private final ConcurrentMap<Chunk, Queue<int[]>> healedBlocks = new ConcurrentHashMap<>();
 
     /**
-     * Reference to the plugin.
+     * The amount of durability that should be restored with each heal.
      */
-    private final SoftClaimsPlugin plugin;
+    private int repairDelta;
 
-    private static final int ANIMATIONS_PER_TICK = 15;
+    /**
+     * Async task for repairing blocks in factions.
+     */
+    private BukkitTask repairTask;
+    /**
+     * Task for playing block heal animations.
+     */
+    private BukkitTask repairAnimationTask;
 
     public BlockRepairService(SoftClaimsPlugin plugin) {
         this.plugin = plugin;
     }
 
-    /**
-     * Initializes the component.
-     */
-    public void initialize() {
+    @Override
+    public void reload() {
+        // cancel previous tasks
+        if (repairTask != null) {
+            repairTask.cancel();
+            repairTask = null;
+        }
+        if (repairAnimationTask != null) {
+            repairAnimationTask.cancel();
+            repairAnimationTask = null;
+        }
+
+        // set heal delta
+        this.repairDelta = plugin.getConfig().getInt("repair.repairDelta", 0);
+
+        // set the heal frequency
         int frequency = 20 * plugin.getConfig().getInt("repair.repairFrequency", 300);
-        Bukkit.getScheduler().runTaskTimerAsynchronously(
+        this.repairTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
                 plugin, this::repairBlocksTask, frequency, frequency);
-        Bukkit.getScheduler().runTaskTimer(plugin, this::repairTick, 10, 10);
+
+        // run the repair animations every 10 ticks
+        this.repairAnimationTask = Bukkit.getScheduler().runTaskTimer(
+                plugin, this::repairTick, 10, 10);
     }
 
     /**
@@ -50,29 +82,41 @@ public class BlockRepairService {
      */
     private void repairBlocksTask() {
         // get repair delta
-        int repairDelta = plugin.getConfig().getInt("repair.repairDelta", 0);
-        double repairCost = plugin.getConfig().getInt("repair.repairCost", 0);
-        if (repairDelta == 0) return;
+        if (repairDelta == 0) {
+            return;
+        }
 
-        // repair blocks in every faction
-        List<String> factions = plugin.getFactionService().getFactions();
-        for (String faction : factions) {
-            for (Chunk factionChunk :
-                    plugin.getFactionService().getAllFactionChunks(faction)) {
+        // repair blocks for every faction
+        List<Faction> factions = plugin.getFactionService().getAllFactions();
+        for (Faction faction : factions) {
+            // get faction chunks
+            List<Chunk> factionChunks = plugin.getFactionService()
+                    .getAllFactionChunks(faction.getName());
+
+            // calculate faction chunk influence
+            int chunkInfluence = (int) (faction.getPower() - factionChunks.size());
+
+            // calculate repair delta
+            int repairDeltaAdjusted;
+            if (chunkInfluence >= 0) {
+                repairDeltaAdjusted = repairDelta;
+            } else {
+                repairDeltaAdjusted = (int) (repairDelta *
+                        ((double) (factionChunks.size() + repairDelta) / (double) factionChunks.size()));
+            }
+
+            // skip if no repair
+            if (repairDeltaAdjusted <= 0) {
+                return;
+            }
+
+            // heal blocks
+            for (Chunk factionChunk : factionChunks) {
                 try {
-                    // check if faction can afford
-                    int blocksToRepairInChunk = plugin.getBlockDurabilityService()
-                            .countDamagedInChunk(factionChunk);
-                    double cost = blocksToRepairInChunk * repairCost;
-                    if (!plugin.getFactionService().chargeFaction(faction, cost)) {
-                        break;
-                    }
-
-                    // heal blocks
                     healedBlocks.put(
                         factionChunk,
                         plugin.getBlockDurabilityService()
-                        .modifyDurabilitiesInChunk(factionChunk, repairDelta)
+                        .modifyDurabilitiesInChunk(factionChunk, repairDeltaAdjusted)
                         .stream().map((s) -> {
                             String[] posUnparsed = s.split(",");
                             return new int[]{
@@ -80,7 +124,7 @@ public class BlockRepairService {
                                 Integer.parseInt(posUnparsed[1]),
                                 Integer.parseInt(posUnparsed[2])
                             };
-                        }).collect(Collectors.toCollection(LinkedBlockingQueue::new)));
+                        }).collect(Collectors.toCollection(LinkedList::new)));
                 } catch (ChunkBusyException | ChunkNotLoadedException ignored) {}
             }
         }
@@ -127,7 +171,8 @@ public class BlockRepairService {
         for (int i = 0; i < 6; i++) {
             Block adjacent = b.getRelative(blockFaceFromInt(i));
             if (adjacent.isEmpty()) {
-                adjacent.getWorld().spawnParticle(Particle.COMPOSTER, adjacent.getLocation(), 1);
+                adjacent.getWorld().spawnParticle(
+                        Particle.COMPOSTER, adjacent.getLocation(), 1);
             }
         }
     }

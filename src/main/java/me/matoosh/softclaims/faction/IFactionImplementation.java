@@ -1,9 +1,9 @@
 package me.matoosh.softclaims.faction;
 
 import org.bukkit.Chunk;
+import org.bukkit.entity.Player;
 
 import java.util.List;
-import java.util.UUID;
 
 public interface IFactionImplementation {
     /**
@@ -15,31 +15,37 @@ public interface IFactionImplementation {
      * Gets the list of factions on the server.
      * @return The list of factions.
      */
-    List<String> getFactions();
+    List<Faction> getAllFactions();
 
     /**
-     * Attempts to charge a faction the given price.
+     * Gets faction by name.
      * @param factionName The name of the faction.
-     * @param price The price to charge.
-     * @return Whether the faction could pay the price.
+     * @return The faction if found.
      */
-    boolean chargeFaction(String factionName, double price);
+    Faction getFaction(String factionName);
 
     /**
-     * Checks whether a chunk is in faction land.
-     * @param chunk The chunk to check.
-     * @return Whether the chunk is in faction land.
+     * Gets faction by chunk.
+     * @param factionChunk A chunk that belongs to the faction.
+     * @return The faction if found.
      */
-    boolean isInFactionLand(Chunk chunk);
+    Faction getFaction(Chunk factionChunk);
+
+    /**
+     * Gets the faction which the specified player is a member of.
+     * @param factionMember The player.
+     * @return The faction if found.
+     */
+    Faction getFaction(Player factionMember);
 
     /**
      * Checks whether the player can break blocks
      * in the faction at chunk.
-     * @param uuid The UUID of the player.
+     * @param player The player.
      * @param factionChunk The chunk to be checked.
      * @return Whether the player can break blocks in the faction.
      */
-    boolean canPlayerDestroyInFaction(UUID uuid, Chunk factionChunk);
+    boolean canPlayerDestroyInFaction(Player player, Chunk factionChunk);
 
     /**
      * Lists all chunks claimed by factions.

@@ -1,5 +1,7 @@
-package me.matoosh.softclaims.durability;
+package me.matoosh.softclaims.service;
 
+import lombok.Data;
+import lombok.Getter;
 import me.matoosh.blockmetadata.BlockMetadataStorage;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
@@ -12,11 +14,9 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Getter
 public class BlockDurabilityService {
 
-    /**
-     * Plugin reference.
-     */
     private final SoftClaimsPlugin plugin;
 
     /**
@@ -29,7 +29,8 @@ public class BlockDurabilityService {
         this.plugin = plugin;
 
         // get data folder
-        Path durabilitiesDataDir = plugin.getDataFolder().toPath().resolve("data");
+        Path durabilitiesDataDir = plugin.getDataFolder().toPath()
+                .resolve("data").resolve("durabilities");
 
         // create durabilities storage
         this.durabilityStorage = new BlockMetadataStorage<>(plugin, durabilitiesDataDir);
@@ -115,22 +116,6 @@ public class BlockDurabilityService {
     }
 
     /**
-     * Counts damaged blocks in chunk.
-     * @param chunk The chunk.
-     * @return The number of damaged blocks in the chunk.
-     * @throws ChunkBusyException thrown if the chunk is busy.
-     */
-    public int countDamagedInChunk(Chunk chunk)
-            throws ChunkBusyException, ChunkNotLoadedException {
-        // get durabilities for chunk
-        Map<String, Double> metadata = durabilityStorage.getMetadataInChunk(chunk);
-        if (metadata == null) {
-            return 0;
-        }
-        return metadata.size();
-    }
-
-    /**
      * Get durability of a block.
      * @param block The block.
      * @return Current durability of the block.
@@ -176,8 +161,7 @@ public class BlockDurabilityService {
      */
     public boolean hasDurability(Block block) {
         // check if this world is disabled
-        if (plugin.getConfig().getStringList("disabledWorlds")
-                .contains(block.getWorld().getName())) {
+        if (plugin.getWorldService().isWorldDisabled(block.getWorld())) {
             return false;
         }
         // check if block has durability set
@@ -278,29 +262,12 @@ public class BlockDurabilityService {
         return Math.random() < probability;
     }
 
-
     /**
      * Damaged block information.
      */
+    @Data
     public static class DamagedBlock {
         private final Block block;
         private final double durability;
-
-        public DamagedBlock(Block block, double durability) {
-            this.block = block;
-            this.durability = durability;
-        }
-
-        public Block getBlock() {
-            return block;
-        }
-
-        public double getDurability() {
-            return durability;
-        }
-    }
-
-    public BlockMetadataStorage<Double> getDurabilityStorage() {
-        return durabilityStorage;
     }
 }

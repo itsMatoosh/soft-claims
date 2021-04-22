@@ -12,10 +12,10 @@ import net.prosavage.factionsx.util.PlayerAction;
 import net.prosavage.factionsx.util.Relation;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
+import org.bukkit.entity.Player;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class FactionsxImplementation implements IFactionImplementation {
@@ -32,37 +32,80 @@ public class FactionsxImplementation implements IFactionImplementation {
     }
 
     @Override
-    public List<String> getFactions() {
+    public List<me.matoosh.softclaims.faction.Faction> getAllFactions() {
         return FactionManager.INSTANCE.getFactions()
-                .parallelStream().map(Faction::getTag)
+                .parallelStream()
+                .filter((f) -> !f.isSystemFaction())
+                .map(this::toGenericFaction)
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Gets faction by name.
+     *
+     * @param factionName The name of the faction.
+     * @return The faction if found.
+     */
     @Override
-    public boolean chargeFaction(String factionName, double price) {
+    public me.matoosh.softclaims.faction.Faction getFaction(String factionName) {
         Faction faction = FactionManager.INSTANCE.getFaction(factionName);
-        if (faction == null) return false;
-        Faction.Bank bank = faction.getBank();
-        if (bank.getAmount() < price) return false;
-        double account = bank.getAmount();
-        account -= price;
-        bank.setAmount(account);
-        return true;
+        if (faction == null) {
+            return null;
+        }
+        return toGenericFaction(faction);
     }
 
+    /**
+     * Gets faction by chunk.
+     *
+     * @param factionChunk A chunk that belongs to the faction.
+     * @return The faction if found.
+     */
     @Override
-    public boolean isInFactionLand(Chunk factionChunk) {
-        return !getFactionByChunk(factionChunk).isSystemFaction();
-    }
-
-    @Override
-    public boolean canPlayerDestroyInFaction(UUID uuid, Chunk factionChunk) {
+    public me.matoosh.softclaims.faction.Faction getFaction(Chunk factionChunk) {
         Faction faction = getFactionByChunk(factionChunk);
-        Faction userFaction = getFactionByPlayer(uuid);
-        // check if user has a faction
-        if (userFaction == null) return false;
-        // check if user is member of this faction
-        if (faction == userFaction) return true;
+        if (faction.isSystemFaction()) {
+            return null;
+        }
+        return toGenericFaction(faction);
+    }
+
+    private Faction getFactionByChunk(Chunk factionChunk) {
+        return GridManager.INSTANCE.getFactionAt(factionChunk);
+    }
+
+    /**
+     * Gets the faction which the specified player is a member of.
+     *
+     * @param factionMember The player.
+     * @return The faction if found.
+     */
+    @Override
+    public me.matoosh.softclaims.faction.Faction getFaction(Player factionMember) {
+        Faction faction = getFactionByPlayer(factionMember);
+        if (faction.isSystemFaction()) {
+            return null;
+        }
+        return toGenericFaction(faction);
+    }
+
+    private Faction getFactionByPlayer(Player player) {
+        FPlayer fPlayer = PlayerManager.INSTANCE.getFPlayer(player);
+        return fPlayer.getFaction();
+    }
+
+    @Override
+    public boolean canPlayerDestroyInFaction(Player player, Chunk factionChunk) {
+        Faction faction = getFactionByChunk(factionChunk);
+        Faction userFaction = getFactionByPlayer(player);
+
+        // check if faction exists
+        if (faction.isSystemFaction()) return true;
+        // check if player has a faction
+        if (userFaction.isSystemFaction()) return false;
+
+        // check if player is member of this faction
+        if (faction.equals(userFaction)) return true;
         // check what the faction relation is
         Relation relation = faction.getRelationTo(userFaction);
         // check if the relation has build permissions
@@ -79,15 +122,13 @@ public class FactionsxImplementation implements IFactionImplementation {
                 .collect(Collectors.toList());
     }
 
-    private Faction getFactionByChunk(Chunk factionChunk) {
-        return GridManager.INSTANCE.getFactionAt(factionChunk);
-    }
-
-    private Faction getFactionByPlayer(UUID player) {
-        FPlayer fPlayer = PlayerManager.INSTANCE.getFPlayer(player);
-        if (fPlayer == null) {
-            return null;
-        }
-        return fPlayer.getFaction();
+    /**
+     * Converts a FactionsX faction into a generic SoftClaims faction.
+     * @param faction The FactionsX faction.
+     * @return Generic faction.
+     */
+    public me.matoosh.softclaims.faction.Faction toGenericFaction(Faction faction) {
+        return new me.matoosh.softclaims.faction.Faction(
+                faction.getTag(), faction.getPower(), faction.isSystemFaction());
     }
 }

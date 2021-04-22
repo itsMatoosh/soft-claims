@@ -3,20 +3,13 @@ package me.matoosh.softclaims;
 import co.aikar.commands.BukkitCommandManager;
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
+import lombok.Getter;
 import me.matoosh.blockmetadata.exception.ChunkAlreadyLoadedException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.commands.SoftClaimsCommand;
-import me.matoosh.softclaims.durability.BlockDurabilityService;
-import me.matoosh.softclaims.durability.BlockRepairService;
-import me.matoosh.softclaims.durability.CommunicationService;
-import me.matoosh.softclaims.events.BlockBreakHandler;
-import me.matoosh.softclaims.events.DiggersHandler;
-import me.matoosh.softclaims.events.ExplosionHandler;
-import me.matoosh.softclaims.events.RightClickHandler;
-import me.matoosh.softclaims.faction.FactionService;
+import me.matoosh.softclaims.events.*;
+import me.matoosh.softclaims.service.*;
 import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
-import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.java.annotation.dependency.Dependency;
 import org.bukkit.plugin.java.annotation.dependency.SoftDependency;
@@ -26,26 +19,27 @@ import org.bukkit.plugin.java.annotation.plugin.Plugin;
 import org.bukkit.plugin.java.annotation.plugin.Website;
 import org.bukkit.plugin.java.annotation.plugin.author.Author;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
-@Plugin(name = "SoftClaims", version = "1.7")
+@Plugin(name = "SoftClaims", version = "1.8.0")
 @ApiVersion(ApiVersion.Target.v1_15)
 @Description("Blocks in other factions' land are much harder to break.")
 @Author("itsMatoosh")
 @Website("juulcraft.csrv.pl")
 @Dependency("ProtocolLib")
 @SoftDependency("FactionsX")
+@Getter
 public class SoftClaimsPlugin extends JavaPlugin {
 
-    private ProtocolManager protocolManager;
-    private DiggersHandler diggersHandler;
-    private BlockDurabilityService blockDurabilityService;
+    private final DiggersHandler diggersHandler = new DiggersHandler(this);
     private final CommunicationService communicationService = new CommunicationService();
     private final FactionService factionService = new FactionService(this);
     private final BlockRepairService blockRepairService = new BlockRepairService(this);
+    private final FactionCoreService factionCoreService = new FactionCoreService(this);
+    private final WorldService worldService = new WorldService(this);
+
+    private ProtocolManager protocolManager;
+    private BlockDurabilityService blockDurabilityService;
 
     @Override
     public void onEnable() {
@@ -65,22 +59,15 @@ public class SoftClaimsPlugin extends JavaPlugin {
         this.factionService.initialize();
 
         // init block repair service
-        this.blockRepairService.initialize();
+        this.blockRepairService.reload();
+
+        // init world service
+        this.worldService.reload();
 
         // load data
-        List<CompletableFuture<Void>> tasks = new ArrayList<>();
-        for (World world : Bukkit.getWorlds()) {
-            for(Chunk chunk : world.getLoadedChunks()) {
-                try {
-                    tasks.add(getBlockDurabilityService().getDurabilityStorage().loadChunk(chunk));
-                } catch (ChunkAlreadyLoadedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
         try {
-            CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).get();
-        } catch (InterruptedException | ExecutionException e) {
+            this.worldService.loadMetadataForLoadedChunks().get();
+        } catch (InterruptedException | ExecutionException | ChunkAlreadyLoadedException e) {
             e.printStackTrace();
         }
 
@@ -99,19 +86,9 @@ public class SoftClaimsPlugin extends JavaPlugin {
         getLogger().info("Disabling SoftClaims...");
         getLogger().info("Saving durability info...");
         // save remaining loaded chunks
-        List<CompletableFuture<Void>> tasks = new ArrayList<>();
-        for (World world : Bukkit.getWorlds()) {
-            for(Chunk chunk : world.getLoadedChunks()) {
-                try {
-                    tasks.add(getBlockDurabilityService().getDurabilityStorage().persistChunk(chunk, true));
-                } catch (ChunkNotLoadedException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
         try {
-            CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).get();
-        } catch (InterruptedException | ExecutionException e) {
+            this.worldService.saveMetadataForLoadedChunks().get();
+        } catch (InterruptedException | ExecutionException | ChunkNotLoadedException e) {
             e.printStackTrace();
         }
         getLogger().info("Soft Claims disabled!");
@@ -129,7 +106,6 @@ public class SoftClaimsPlugin extends JavaPlugin {
      * Registers protocol events.
      */
     private void registerProtocolEvents() {
-        diggersHandler = new DiggersHandler(this);
         protocolManager.addPacketListener(diggersHandler);
     }
 
@@ -138,32 +114,9 @@ public class SoftClaimsPlugin extends JavaPlugin {
      */
     private void registerEvents() {
         Bukkit.getPluginManager().registerEvents(diggersHandler, this);
+        Bukkit.getPluginManager().registerEvents(new BlockPlaceHandler(this), this);
+        Bukkit.getPluginManager().registerEvents(new BlockBreakHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new ExplosionHandler(this), this);
         Bukkit.getPluginManager().registerEvents(new RightClickHandler(this), this);
-        Bukkit.getPluginManager().registerEvents(new BlockBreakHandler(this), this);
-    }
-
-    public ProtocolManager getProtocolManager() {
-        return protocolManager;
-    }
-
-    public BlockDurabilityService getBlockDurabilityService() {
-        return blockDurabilityService;
-    }
-
-    public CommunicationService getCommunicationService() {
-        return communicationService;
-    }
-
-    public FactionService getFactionService() {
-        return factionService;
-    }
-
-    public DiggersHandler getDiggersHandler() {
-        return diggersHandler;
-    }
-
-    public BlockRepairService getBlockRepairService() {
-        return blockRepairService;
     }
 }

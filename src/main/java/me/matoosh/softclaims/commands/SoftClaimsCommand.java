@@ -25,7 +25,13 @@ public class SoftClaimsCommand extends BaseCommand {
     @Subcommand("reload")
     @CommandPermission("softclaims.reload")
     public void onReload(CommandSender sender) {
+        // reload config
         this.plugin.reloadConfig();
+
+        // reload reloadables
+        this.plugin.getBlockRepairService().reload();
+        this.plugin.getWorldService().reload();
+
         MSG.send(sender, "Plugin was reloaded successfully!");
     }
 }

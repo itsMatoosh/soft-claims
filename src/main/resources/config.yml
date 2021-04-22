@@ -108,10 +108,8 @@ explosionDamage:
 toolDamageModifier: 0.2
 # block repair settings
 repair:
-  # amount of durability restored each time a block is healed
+  # amount of durability restored each time a block is healed when the faction has full power
   repairDelta: 100
-  # the cost to repair a single block by the amount specified in "repairDelta"
-  repairCost: 0.01
   # frequency in seconds at which blocks in each faction will be repaired
   repairFrequency: 300
 # worlds in which the plugin is disabled
