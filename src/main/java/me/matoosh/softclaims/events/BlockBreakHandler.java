@@ -3,7 +3,9 @@ package me.matoosh.softclaims.events;
 import com.comphenix.protocol.wrappers.BlockPosition;
 import com.destroystokyo.paper.event.block.BlockDestroyEvent;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
+import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import me.matoosh.softclaims.durability.BlockDurabilityService;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -31,7 +33,7 @@ public class BlockBreakHandler implements Listener {
         double blockDurability;
         try {
             blockDurability = plugin.getBlockDurabilityService().getDurabilityRelative(block);
-        } catch (ChunkBusyException e) {
+        } catch (ChunkBusyException | ChunkNotLoadedException e) {
             event.setCancelled(true);
             return;
         }
@@ -54,9 +56,8 @@ public class BlockBreakHandler implements Listener {
                 // allow fast break for people with special faction perms
                 event.setCancelled(false);
 
-                // drop probability
-                double probability = Math.exp(-3 * (1d - blockDurability));
-                event.setDropItems(Math.random() < probability);
+                // drop if block is healthy
+                event.setDropItems(BlockDurabilityService.isBlockHealthy(blockDurability));
             } else {
                 // dont allow breaking without slow down effect
                 event.setCancelled(true);
@@ -75,7 +76,8 @@ public class BlockBreakHandler implements Listener {
     }
 
     @EventHandler
-    public void onBlockDestroy(BlockDestroyEvent event) throws ChunkBusyException {
+    public void onBlockDestroy(BlockDestroyEvent event)
+            throws ChunkBusyException, ChunkNotLoadedException {
         // block durable blocks from getting destroyed by environment
         plugin.getBlockDurabilityService().clearDurability(event.getBlock());
     }
@@ -91,30 +93,33 @@ public class BlockBreakHandler implements Listener {
     }
 
     @EventHandler
-    public void onBlockBurn(BlockBurnEvent event) throws ChunkBusyException {
+    public void onBlockBurn(BlockBurnEvent event) throws ChunkBusyException, ChunkNotLoadedException {
         // clear durability
-        plugin.getBlockDurabilityService().clearDurability(event.getBlock());
+        plugin.getBlockDurabilityService()
+                .clearDurability(event.getBlock());
     }
 
     @EventHandler
-    public void onBlockFade(BlockFadeEvent event) throws ChunkBusyException {
+    public void onBlockFade(BlockFadeEvent event) throws ChunkBusyException, ChunkNotLoadedException {
         // clear durability
-        plugin.getBlockDurabilityService().clearDurability(event.getBlock());
+        plugin.getBlockDurabilityService()
+                .clearDurability(event.getBlock());
     }
 
     @EventHandler
     public void onBlockPistonExtend(BlockPistonExtendEvent event)
-            throws ChunkBusyException {
+            throws ChunkBusyException, ChunkNotLoadedException {
         onBlocksMoveByPiston(event.getBlocks(), event.getDirection());
     }
 
     @EventHandler
     public void onBlockPistonRetract(BlockPistonRetractEvent event)
-            throws ChunkBusyException {
+            throws ChunkBusyException, ChunkNotLoadedException {
         onBlocksMoveByPiston(event.getBlocks(), event.getDirection());
     }
 
-    private void onBlocksMoveByPiston(List<Block> blocks, BlockFace direction) throws ChunkBusyException {
+    private void onBlocksMoveByPiston(List<Block> blocks, BlockFace direction)
+            throws ChunkBusyException, ChunkNotLoadedException {
         for (Block origin : blocks) {
             // get block durability
             double durability = plugin.getBlockDurabilityService()

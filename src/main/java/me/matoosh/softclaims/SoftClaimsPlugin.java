@@ -3,6 +3,8 @@ package me.matoosh.softclaims;
 import co.aikar.commands.BukkitCommandManager;
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
+import me.matoosh.blockmetadata.exception.ChunkAlreadyLoadedException;
+import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.commands.SoftClaimsCommand;
 import me.matoosh.softclaims.durability.BlockDurabilityService;
 import me.matoosh.softclaims.durability.BlockRepairService;
@@ -69,7 +71,11 @@ public class SoftClaimsPlugin extends JavaPlugin {
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
         for (World world : Bukkit.getWorlds()) {
             for(Chunk chunk : world.getLoadedChunks()) {
-                tasks.add(getBlockDurabilityService().getDurabilityStorage().loadChunk(chunk));
+                try {
+                    tasks.add(getBlockDurabilityService().getDurabilityStorage().loadChunk(chunk));
+                } catch (ChunkAlreadyLoadedException e) {
+                    e.printStackTrace();
+                }
             }
         }
         try {
@@ -96,7 +102,11 @@ public class SoftClaimsPlugin extends JavaPlugin {
         List<CompletableFuture<Void>> tasks = new ArrayList<>();
         for (World world : Bukkit.getWorlds()) {
             for(Chunk chunk : world.getLoadedChunks()) {
-                tasks.add(getBlockDurabilityService().getDurabilityStorage().persistChunk(chunk, true));
+                try {
+                    tasks.add(getBlockDurabilityService().getDurabilityStorage().persistChunk(chunk, true));
+                } catch (ChunkNotLoadedException e) {
+                    e.printStackTrace();
+                }
             }
         }
         try {

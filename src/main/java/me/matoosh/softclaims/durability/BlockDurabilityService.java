@@ -2,6 +2,7 @@ package me.matoosh.softclaims.durability;
 
 import me.matoosh.blockmetadata.BlockMetadataStorage;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
+import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
@@ -40,7 +41,7 @@ public class BlockDurabilityService {
      * @param durability The new durability.
      */
     public void setDurabilityAbsolute(Block block, int durability)
-            throws ChunkBusyException {
+            throws ChunkBusyException, ChunkNotLoadedException {
         setDurabilityRelative(block, getDurabilityRelative(block, durability));
     }
 
@@ -50,7 +51,7 @@ public class BlockDurabilityService {
      * @param durability Durability between 0 and 1.
      */
     public void setDurabilityRelative(Block block, double durability)
-            throws ChunkBusyException {
+            throws ChunkBusyException, ChunkNotLoadedException {
         // check if value is correct
         if (!Double.isFinite(durability)) return;
 
@@ -70,7 +71,7 @@ public class BlockDurabilityService {
      * @return List of modified durability keys.
      */
     public List<String> modifyDurabilitiesInChunk(Chunk chunk, int delta)
-            throws ChunkBusyException {
+            throws ChunkBusyException, ChunkNotLoadedException {
         // check if delta is correct
         if (!Double.isFinite(delta)) return Collections.emptyList();
 
@@ -119,7 +120,8 @@ public class BlockDurabilityService {
      * @return The number of damaged blocks in the chunk.
      * @throws ChunkBusyException thrown if the chunk is busy.
      */
-    public int countDamagedInChunk(Chunk chunk) throws ChunkBusyException {
+    public int countDamagedInChunk(Chunk chunk)
+            throws ChunkBusyException, ChunkNotLoadedException {
         // get durabilities for chunk
         Map<String, Double> metadata = durabilityStorage.getMetadataInChunk(chunk);
         if (metadata == null) {
@@ -133,7 +135,8 @@ public class BlockDurabilityService {
      * @param block The block.
      * @return Current durability of the block.
      */
-    public int getDurabilityAbsolute(Block block) throws ChunkBusyException {
+    public int getDurabilityAbsolute(Block block)
+            throws ChunkBusyException, ChunkNotLoadedException {
         double durability = getDurabilityRelative(block);
         if (durability == 0) {
             return 0;
@@ -147,7 +150,8 @@ public class BlockDurabilityService {
      * @param block The block.
      * @return Current durability of the block.
      */
-    public double getDurabilityRelative(Block block) throws ChunkBusyException {
+    public double getDurabilityRelative(Block block)
+            throws ChunkBusyException, ChunkNotLoadedException {
         if (block == null) return 0d;
 
         // check if block has durability
@@ -188,7 +192,8 @@ public class BlockDurabilityService {
      * Clears all durability data in a chunk.
      * @param chunk The chunk.
      */
-    public void clearDurabilitiesInChunk(Chunk chunk) throws ChunkBusyException {
+    public void clearDurabilitiesInChunk(Chunk chunk)
+            throws ChunkBusyException, ChunkNotLoadedException {
         durabilityStorage.removeMetadataForChunk(chunk);
     }
 
@@ -196,7 +201,8 @@ public class BlockDurabilityService {
      * Clears durability of a block.
      * @param block The block.
      */
-    public void clearDurability(Block block) throws ChunkBusyException {
+    public void clearDurability(Block block)
+            throws ChunkBusyException, ChunkNotLoadedException {
         durabilityStorage.removeMetadata(block);
     }
 
@@ -207,7 +213,7 @@ public class BlockDurabilityService {
      * @throws ChunkBusyException Thrown if the chunks is busy.
      */
     public List<DamagedBlock> getDamagedBlocksInChunk(Chunk chunk)
-            throws ChunkBusyException {
+            throws ChunkBusyException, ChunkNotLoadedException {
         // check if there are durabilities in chunk
         if (durabilityStorage.hasMetadataForChunk(chunk)) {
             return Collections.emptyList();
@@ -257,6 +263,19 @@ public class BlockDurabilityService {
         if (material == null) return 0;
         return plugin.getConfig().getInt("blocks."
                 + material.name() + ".durability", 0);
+    }
+
+    /**
+     * Probability function deciding whether a block with
+     * the given relative durability is "healthy" or not.
+     * Healthy blocks will drop when mined, and won't break
+     * down after a faction core is destroyed.
+     * @param relativeDurability The relative durability of the block.
+     * @return Whether the block is healthy.
+     */
+    public static boolean isBlockHealthy(double relativeDurability) {
+        double probability = Math.exp(-3 * (1d - relativeDurability));
+        return Math.random() < probability;
     }
 
 

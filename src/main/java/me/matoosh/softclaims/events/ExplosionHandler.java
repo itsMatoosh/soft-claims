@@ -1,6 +1,7 @@
 package me.matoosh.softclaims.events;
 
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
+import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -112,7 +113,7 @@ public class ExplosionHandler implements Listener {
                 int durability;
                 try {
                     durability = plugin.getBlockDurabilityService().getDurabilityAbsolute(b);
-                } catch (ChunkBusyException e) {
+                } catch (ChunkBusyException | ChunkNotLoadedException e) {
                     continue;
                 }
 
@@ -127,14 +128,14 @@ public class ExplosionHandler implements Listener {
                     // update durability
                     try {
                         plugin.getBlockDurabilityService().setDurabilityAbsolute(b, durability);
-                    } catch (ChunkBusyException e) {
+                    } catch (ChunkBusyException | ChunkNotLoadedException e) {
                         e.printStackTrace();
                     }
                 } else {
                     // block exploded
                     try {
                         plugin.getBlockDurabilityService().clearDurability(b);
-                    } catch (ChunkBusyException ignored) {
+                    } catch (ChunkBusyException | ChunkNotLoadedException ignored) {
                         // cant happen cause the chunk must be loaded for explosion
                     }
                     destroyedBlocks.add(b);

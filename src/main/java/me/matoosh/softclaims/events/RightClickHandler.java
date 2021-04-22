@@ -1,6 +1,7 @@
 package me.matoosh.softclaims.events;
 
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
+import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
@@ -35,7 +36,7 @@ public class RightClickHandler implements Listener {
             int durability;
             try {
                 durability = plugin.getBlockDurabilityService().getDurabilityAbsolute(event.getClickedBlock());
-            } catch (ChunkBusyException e) {
+            } catch (ChunkBusyException | ChunkNotLoadedException e) {
                 return;
             }
             if(durability == 0) return;

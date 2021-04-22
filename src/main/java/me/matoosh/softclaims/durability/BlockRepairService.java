@@ -1,6 +1,7 @@
 package me.matoosh.softclaims.durability;
 
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
+import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -80,7 +81,7 @@ public class BlockRepairService {
                                 Integer.parseInt(posUnparsed[2])
                             };
                         }).collect(Collectors.toCollection(LinkedBlockingQueue::new)));
-                } catch (ChunkBusyException ignored) {}
+                } catch (ChunkBusyException | ChunkNotLoadedException ignored) {}
             }
         }
     }

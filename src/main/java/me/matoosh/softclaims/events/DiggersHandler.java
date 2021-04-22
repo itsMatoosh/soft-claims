@@ -9,6 +9,7 @@ import com.comphenix.protocol.injector.GamePhase;
 import com.comphenix.protocol.wrappers.BlockPosition;
 import com.comphenix.protocol.wrappers.EnumWrappers;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
+import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
@@ -84,7 +85,7 @@ public class DiggersHandler implements PacketListener, Listener {
         int blockDurability;
         try {
             blockDurability = plugin.getBlockDurabilityService().getDurabilityAbsolute(block);
-        } catch (ChunkBusyException e) {
+        } catch (ChunkBusyException | ChunkNotLoadedException e) {
             return;
         }
         if (blockDurability == 0) return;
@@ -126,7 +127,7 @@ public class DiggersHandler implements PacketListener, Listener {
             // save current dig progress
             try {
                 digProgress.save();
-            } catch (ChunkBusyException e) {
+            } catch (ChunkBusyException | ChunkNotLoadedException e) {
                 e.printStackTrace();
             }
         }
@@ -162,7 +163,7 @@ public class DiggersHandler implements PacketListener, Listener {
             // save block durability and damage tool
             try {
                 digProgress.save();
-            } catch (ChunkBusyException e) {
+            } catch (ChunkBusyException | ChunkNotLoadedException e) {
                 e.printStackTrace();
             }
 
@@ -341,7 +342,7 @@ public class DiggersHandler implements PacketListener, Listener {
             return ++swingsSinceSave;
         }
 
-        public void save() throws ChunkBusyException {
+        public void save() throws ChunkBusyException, ChunkNotLoadedException {
             // damage tool
             if (toolDamageModifier > 0 && toolMeta != null) {
                 Damageable damageable = (Damageable) toolMeta;
