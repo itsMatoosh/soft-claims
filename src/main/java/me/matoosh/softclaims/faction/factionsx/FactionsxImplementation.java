@@ -1,6 +1,7 @@
 package me.matoosh.softclaims.faction.factionsx;
 
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import me.matoosh.softclaims.faction.IFactionImplementation;
 import net.prosavage.factionsx.core.FPlayer;
 import net.prosavage.factionsx.core.Faction;
@@ -120,6 +121,26 @@ public class FactionsxImplementation implements IFactionImplementation {
         return GridManager.INSTANCE.getAllClaims(faction)
                 .stream().map(FLocation::getChunk)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Claims chunks for a faction.
+     *
+     * @param factionName The name of the faction.
+     * @param chunks      The chunks.
+     * @param player      The player.
+     */
+    @Override
+    public void claimChunks(String factionName, Player player, List<Chunk> chunks) throws FactionDoesntExistException {
+        Faction faction = FactionManager.INSTANCE.getFaction(factionName);
+        if (faction == null) {
+            throw new FactionDoesntExistException();
+        }
+        GridManager.INSTANCE.claimLand(faction,
+                chunks.parallelStream()
+                    .map(c -> new FLocation(c.getX(), c.getZ(), c.getWorld().getName()))
+                    .toArray(FLocation[]::new),
+                PlayerManager.INSTANCE.getFPlayer(player), true);
     }
 
     /**

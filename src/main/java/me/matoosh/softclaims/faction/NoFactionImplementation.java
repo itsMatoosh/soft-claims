@@ -79,4 +79,14 @@ public class NoFactionImplementation implements IFactionImplementation {
     public List<Chunk> getAllFactionChunks(String factionName) {
         return Collections.emptyList();
     }
+
+    /**
+     * Claims chunks for a faction.
+     *
+     * @param factionName The name of the faction.
+     * @param player      The claiming player.
+     * @param chunks      The chunks.
+     */
+    @Override
+    public void claimChunks(String factionName, Player player, List<Chunk> chunks) { }
 }

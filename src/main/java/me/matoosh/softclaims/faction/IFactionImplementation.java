@@ -1,5 +1,6 @@
 package me.matoosh.softclaims.faction;
 
+import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import org.bukkit.Chunk;
 import org.bukkit.entity.Player;
 
@@ -53,4 +54,12 @@ public interface IFactionImplementation {
      * @return All chunks claimed by factions.
      */
     List<Chunk> getAllFactionChunks(String factionName);
+
+    /**
+     * Claims chunks for a faction.
+     * @param chunks The chunks.
+     * @param player The claiming player.
+     * @param factionName The name of the faction.
+     */
+    void claimChunks(String factionName, Player player, List<Chunk> chunks) throws FactionDoesntExistException;
 }

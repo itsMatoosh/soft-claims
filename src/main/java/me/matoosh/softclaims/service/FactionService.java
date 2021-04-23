@@ -1,6 +1,7 @@
 package me.matoosh.softclaims.service;
 
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import me.matoosh.softclaims.faction.Faction;
 import me.matoosh.softclaims.faction.IFactionImplementation;
 import me.matoosh.softclaims.faction.NoFactionImplementation;
@@ -95,5 +96,16 @@ public class FactionService {
      */
     public List<Chunk> getAllFactionChunks(String factionName) {
         return factionImplementation.getAllFactionChunks(factionName);
+    }
+
+    /**
+     * Claims chunks for a faction.
+     * @param chunks The chunks.
+     * @param player The claiming player.
+     * @param factionName The name of the faction.
+     */
+    public void claimChunks(String factionName, Player player, List<Chunk> chunks)
+            throws FactionDoesntExistException {
+        factionImplementation.claimChunks(factionName, player, chunks);
     }
 }
