@@ -1,2 +1,4 @@
-package me.matoosh.softclaims.exception.faction;public class NotEnoughPowerException {
+package me.matoosh.softclaims.exception.faction;
+
+public class NotEnoughPowerException extends Exception {
 }
