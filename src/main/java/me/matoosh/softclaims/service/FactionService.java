@@ -3,6 +3,7 @@ package me.matoosh.softclaims.service;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import me.matoosh.softclaims.faction.Faction;
+import me.matoosh.softclaims.faction.FactionPermission;
 import me.matoosh.softclaims.faction.IFactionImplementation;
 import me.matoosh.softclaims.faction.NoFactionImplementation;
 import me.matoosh.softclaims.faction.factionsx.FactionsxImplementation;
@@ -78,7 +79,30 @@ public class FactionService {
      * @return Whether the player can break blocks in the faction.
      */
     public boolean canPlayerDestroyInFaction(Player player, Chunk factionChunk) {
-        return factionImplementation.canPlayerDestroyInFaction(player, factionChunk);
+        // get faction at chunk
+        Faction faction = getFaction(factionChunk);
+        if (faction == null) {
+            return true;
+        }
+
+        // get player's permission to destroy
+        try {
+            return hasPlayerPermission(player, faction.getName(), FactionPermission.BREAK_BLOCK);
+        } catch (FactionDoesntExistException e) {
+            return true;
+        }
+    }
+
+    /**
+     * Checks whether the player has a specific permission in the faction.
+     * @param player The player.
+     * @param factionName The name of the faction.
+     * @param permission The permission.
+     * @return Whether the player has the specified permission in the faction.
+     */
+    public boolean hasPlayerPermission(Player player, String factionName, FactionPermission permission)
+            throws FactionDoesntExistException {
+        return factionImplementation.hasPlayerPermission(player, factionName, permission);
     }
 
     /**

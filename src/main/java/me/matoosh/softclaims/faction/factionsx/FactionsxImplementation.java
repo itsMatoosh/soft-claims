@@ -2,6 +2,7 @@ package me.matoosh.softclaims.faction.factionsx;
 
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
+import me.matoosh.softclaims.faction.FactionPermission;
 import me.matoosh.softclaims.faction.IFactionImplementation;
 import net.prosavage.factionsx.core.FPlayer;
 import net.prosavage.factionsx.core.Faction;
@@ -9,6 +10,7 @@ import net.prosavage.factionsx.manager.FactionManager;
 import net.prosavage.factionsx.manager.GridManager;
 import net.prosavage.factionsx.manager.PlayerManager;
 import net.prosavage.factionsx.persist.data.FLocation;
+import net.prosavage.factionsx.util.MemberAction;
 import net.prosavage.factionsx.util.PlayerAction;
 import net.prosavage.factionsx.util.Relation;
 import org.bukkit.Bukkit;
@@ -90,28 +92,51 @@ public class FactionsxImplementation implements IFactionImplementation {
         return toGenericFaction(faction);
     }
 
+    /**
+     * Checks whether the player has a specific permission in the faction.
+     *
+     * @param player      The player.
+     * @param factionName The name of the faction.
+     * @param permission  The permission.
+     * @return Whether the player has the specified permission in the faction.
+     */
+    @Override
+    public boolean hasPlayerPermission(Player player, String factionName, FactionPermission permission)
+            throws FactionDoesntExistException {
+        // get faction
+        Faction faction = FactionManager.INSTANCE.getFaction(factionName);
+        // check if faction exists
+        if (faction == null) throw new FactionDoesntExistException();
+
+        // get player's faction
+        Faction playerFaction = getFactionByPlayer(player);
+
+        // check if player has a faction
+        if (playerFaction.isSystemFaction()) return false;
+
+        // check if player is member of this faction
+        Enum fXAction = getAction(permission);
+        if (faction.equals(playerFaction)) {
+            // get fplayer
+            FPlayer fPlayer = PlayerManager.INSTANCE.getFPlayer(player);
+            if (fXAction instanceof PlayerAction) {
+                return fPlayer.getRole().canDoPlayerAction((PlayerAction) fXAction);
+            } else if (fXAction instanceof MemberAction) {
+                return fPlayer.getRole().canDoMemberAction((MemberAction) fXAction);
+            }
+        } else if (fXAction instanceof PlayerAction) {
+            // check what the faction relation is
+            Relation relation = faction.getRelationTo(playerFaction);
+            // check if the relation has build permissions
+            return faction.getRelationPerms().getPermForRelation(
+                    relation, (PlayerAction) fXAction);
+        }
+        return false;
+    }
+
     private Faction getFactionByPlayer(Player player) {
         FPlayer fPlayer = PlayerManager.INSTANCE.getFPlayer(player);
         return fPlayer.getFaction();
-    }
-
-    @Override
-    public boolean canPlayerDestroyInFaction(Player player, Chunk factionChunk) {
-        Faction faction = getFactionByChunk(factionChunk);
-        Faction userFaction = getFactionByPlayer(player);
-
-        // check if faction exists
-        if (faction.isSystemFaction()) return true;
-        // check if player has a faction
-        if (userFaction.isSystemFaction()) return false;
-
-        // check if player is member of this faction
-        if (faction.equals(userFaction)) return true;
-        // check what the faction relation is
-        Relation relation = faction.getRelationTo(userFaction);
-        // check if the relation has build permissions
-        return faction.getRelationPerms()
-                .getPermForRelation(relation, PlayerAction.BREAK_BLOCK);
     }
 
     @Override
@@ -151,5 +176,22 @@ public class FactionsxImplementation implements IFactionImplementation {
     public me.matoosh.softclaims.faction.Faction toGenericFaction(Faction faction) {
         return new me.matoosh.softclaims.faction.Faction(
                 faction.getTag(), faction.getPower(), faction.isSystemFaction());
+    }
+
+    /**
+     * Converts generic faction permission to FactionsX action.
+     * @param permission Generic permission.
+     * @return FactionsX action.
+     */
+    public Enum getAction(FactionPermission permission) {
+        switch (permission) {
+            case BREAK_BLOCK:
+                return PlayerAction.BREAK_BLOCK;
+            case CLAIM_CHUNK:
+                return MemberAction.CLAIM;
+            case UNCLAIM_CHUNK:
+                return MemberAction.UNCLAIM;
+        }
+        return null;
     }
 }

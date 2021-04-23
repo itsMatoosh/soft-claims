@@ -57,15 +57,15 @@ public class NoFactionImplementation implements IFactionImplementation {
     }
 
     /**
-     * Checks whether the player can break blocks
-     * in the faction at chunk.
+     * Checks whether the player has a specific permission in the faction.
      *
-     * @param player       The player.
-     * @param factionChunk The chunk to be checked.
-     * @return Whether the player can break blocks in the faction.
+     * @param player      The player.
+     * @param factionName The name of the faction.
+     * @param permission  The permission.
+     * @return Whether the player has the specified permission in the faction.
      */
     @Override
-    public boolean canPlayerDestroyInFaction(Player player, Chunk factionChunk) {
+    public boolean hasPlayerPermission(Player player, String factionName, FactionPermission permission) {
         return true;
     }
 
