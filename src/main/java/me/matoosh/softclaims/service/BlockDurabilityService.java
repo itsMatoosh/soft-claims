@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 @Getter
 public class BlockDurabilityService {
 
+    private final WorldService worldService;
+    private final FactionService factionService;
     private final SoftClaimsPlugin plugin;
 
     /**
@@ -24,8 +26,10 @@ public class BlockDurabilityService {
      */
     private final BlockMetadataStorage<Double> durabilityStorage;
 
-    public BlockDurabilityService(SoftClaimsPlugin plugin) {
-        // save plugin reference
+    public BlockDurabilityService(WorldService worldService, FactionService factionService,
+                                  SoftClaimsPlugin plugin) {
+        this.worldService = worldService;
+        this.factionService = factionService;
         this.plugin = plugin;
 
         // get data folder

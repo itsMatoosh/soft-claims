@@ -7,6 +7,7 @@ import lombok.Data;
  */
 @Data
 public class Faction {
+    private final String id;
     private final String name;
     private final double power;
     private final boolean system;

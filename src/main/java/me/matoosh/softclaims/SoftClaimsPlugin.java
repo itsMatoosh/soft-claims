@@ -4,8 +4,6 @@ import co.aikar.commands.BukkitCommandManager;
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.ProtocolManager;
 import lombok.Getter;
-import me.matoosh.blockmetadata.exception.ChunkAlreadyLoadedException;
-import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.commands.SoftClaimsCommand;
 import me.matoosh.softclaims.events.*;
 import me.matoosh.softclaims.service.*;
@@ -19,8 +17,6 @@ import org.bukkit.plugin.java.annotation.plugin.Plugin;
 import org.bukkit.plugin.java.annotation.plugin.Website;
 import org.bukkit.plugin.java.annotation.plugin.author.Author;
 
-import java.util.concurrent.ExecutionException;
-
 @Plugin(name = "SoftClaims", version = "1.8.0")
 @ApiVersion(ApiVersion.Target.v1_15)
 @Description("Blocks in other factions' land are much harder to break.")
@@ -31,29 +27,37 @@ import java.util.concurrent.ExecutionException;
 @Getter
 public class SoftClaimsPlugin extends JavaPlugin {
 
-    private final DiggersHandler diggersHandler = new DiggersHandler(this);
-    private final CommunicationService communicationService = new CommunicationService();
-    private final FactionService factionService = new FactionService(this);
-    private final BlockRepairService blockRepairService = new BlockRepairService(this);
-    private final FactionCoreService factionCoreService = new FactionCoreService(this);
-    private final WorldService worldService = new WorldService(this);
-
+    private CommunicationService communicationService;
+    private FactionService factionService;
     private ProtocolManager protocolManager;
     private BlockDurabilityService blockDurabilityService;
+    private FactionCoreService factionCoreService;
+    private DiggersHandler diggersHandler;
+    private BlockRepairService blockRepairService;
+    private WorldService worldService;
 
     @Override
     public void onEnable() {
         // save config
         this.saveDefaultConfig();
 
+        // create services
+        communicationService = new CommunicationService();
+        factionService = new FactionService(this);
+        worldService = new WorldService(this);
+        blockDurabilityService = new BlockDurabilityService(worldService, factionService, this);
+        blockRepairService = new BlockRepairService(factionService, blockDurabilityService, this);
+        factionCoreService = new FactionCoreService(this, factionService, worldService);
+
+        // create handlers
+        diggersHandler = new DiggersHandler(factionService, blockDurabilityService,
+                communicationService, protocolManager, this);
+
         // register commands
         registerCommands();
 
         // register events
         registerEvents();
-
-        // init block durability service
-        blockDurabilityService = new BlockDurabilityService(this);
 
         // init faction service
         this.factionService.initialize();
@@ -63,13 +67,6 @@ public class SoftClaimsPlugin extends JavaPlugin {
 
         // init world service
         this.worldService.reload();
-
-        // load data
-        try {
-            this.worldService.loadMetadataForLoadedChunks().get();
-        } catch (InterruptedException | ExecutionException | ChunkAlreadyLoadedException e) {
-            e.printStackTrace();
-        }
 
         getLogger().info("Soft Claims enabled!");
     }
@@ -83,14 +80,6 @@ public class SoftClaimsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        getLogger().info("Disabling SoftClaims...");
-        getLogger().info("Saving durability info...");
-        // save remaining loaded chunks
-        try {
-            this.worldService.saveMetadataForLoadedChunks().get();
-        } catch (InterruptedException | ExecutionException | ChunkNotLoadedException e) {
-            e.printStackTrace();
-        }
         getLogger().info("Soft Claims disabled!");
     }
 
@@ -99,7 +88,7 @@ public class SoftClaimsPlugin extends JavaPlugin {
      */
     private void registerCommands() {
         BukkitCommandManager commandManager = new BukkitCommandManager(this);
-        commandManager.registerCommand(new SoftClaimsCommand(this));
+        commandManager.registerCommand(new SoftClaimsCommand(blockRepairService, worldService, this));
     }
 
     /**
@@ -114,9 +103,13 @@ public class SoftClaimsPlugin extends JavaPlugin {
      */
     private void registerEvents() {
         Bukkit.getPluginManager().registerEvents(diggersHandler, this);
-        Bukkit.getPluginManager().registerEvents(new BlockPlaceHandler(this), this);
-        Bukkit.getPluginManager().registerEvents(new BlockBreakHandler(this), this);
-        Bukkit.getPluginManager().registerEvents(new ExplosionHandler(this), this);
-        Bukkit.getPluginManager().registerEvents(new RightClickHandler(this), this);
+        Bukkit.getPluginManager().registerEvents(new FactionCoreBlockHandler(
+                worldService, factionCoreService, this), this);
+        Bukkit.getPluginManager().registerEvents(new BlockBreakHandler(
+                blockDurabilityService, factionService, diggersHandler), this);
+        Bukkit.getPluginManager().registerEvents(new ExplosionHandler(
+                blockDurabilityService, factionService, worldService, this), this);
+        Bukkit.getPluginManager().registerEvents(new RightClickHandler(
+                blockDurabilityService, communicationService, this), this);
     }
 }

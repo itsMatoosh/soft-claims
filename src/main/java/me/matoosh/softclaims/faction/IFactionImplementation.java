@@ -20,10 +20,10 @@ public interface IFactionImplementation {
 
     /**
      * Gets faction by name.
-     * @param factionName The name of the faction.
+     * @param factionId The name of the faction.
      * @return The faction if found.
      */
-    Faction getFaction(String factionName);
+    Faction getFaction(String factionId) throws FactionDoesntExistException;
 
     /**
      * Gets faction by chunk.
@@ -42,25 +42,31 @@ public interface IFactionImplementation {
     /**
      * Checks whether the player has a specific permission in the faction.
      * @param player The player.
-     * @param factionName The name of the faction.
+     * @param factionId The name of the faction.
      * @param permission The permission.
      * @return Whether the player has the specified permission in the faction.
      */
-    boolean hasPlayerPermission(Player player, String factionName, FactionPermission permission)
+    boolean hasPlayerPermission(String factionId, Player player, FactionPermission permission)
             throws FactionDoesntExistException;
 
     /**
      * Lists all chunks claimed by factions.
-     * @param factionName The faction to get chunks for.
+     * @param factionId The faction to get chunks for.
      * @return All chunks claimed by factions.
      */
-    List<Chunk> getAllFactionChunks(String factionName);
+    List<Chunk> getAllFactionChunks(String factionId);
 
     /**
-     * Claims chunks for a faction.
-     * @param chunks The chunks.
-     * @param player The claiming player.
-     * @param factionName The name of the faction.
+     * Claims a chunk for a faction.
+     * @param chunk The chunk.
+     * @param factionId The id of the faction.
      */
-    void claimChunks(String factionName, Player player, List<Chunk> chunks) throws FactionDoesntExistException;
+    void claimChunk(String factionId, Chunk chunk) throws FactionDoesntExistException;
+
+    /**
+     * Unclaims a chunk for a faction.
+     * @param chunk The chunk.
+     * @param factionId The id of the faction.
+     */
+    void unclaimChunk(String factionId, Chunk chunk) throws FactionDoesntExistException;
 }

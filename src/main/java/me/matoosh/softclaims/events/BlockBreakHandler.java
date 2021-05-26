@@ -2,27 +2,24 @@ package me.matoosh.softclaims.events;
 
 import com.comphenix.protocol.wrappers.BlockPosition;
 import com.destroystokyo.paper.event.block.BlockDestroyEvent;
+import lombok.RequiredArgsConstructor;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
-import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.service.BlockDurabilityService;
+import me.matoosh.softclaims.service.FactionService;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.*;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 
-import java.util.List;
-
+@RequiredArgsConstructor
 public class BlockBreakHandler implements Listener {
 
-    private final SoftClaimsPlugin plugin;
-
-    public BlockBreakHandler(SoftClaimsPlugin plugin) {
-        this.plugin = plugin;
-    }
+    private final BlockDurabilityService blockDurabilityService;
+    private final FactionService factionService;
+    private final DiggersHandler diggersHandler;
 
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
@@ -32,14 +29,14 @@ public class BlockBreakHandler implements Listener {
         // check if block has durability
         double blockDurability;
         try {
-            blockDurability = plugin.getBlockDurabilityService().getDurabilityRelative(block);
+            blockDurability = blockDurabilityService.getDurabilityRelative(block);
         } catch (ChunkBusyException | ChunkNotLoadedException e) {
             event.setCancelled(true);
             return;
         }
         if (blockDurability == 0 && event.isCancelled()) {
             // bypass default faction protection for non-durable blocks.
-            if (plugin.getFactionService().isInFactionLand(block.getChunk())) {
+            if (factionService.isInFactionLand(block.getChunk())) {
                 event.setCancelled(false);
             }
             return;
@@ -49,9 +46,9 @@ public class BlockBreakHandler implements Listener {
         }
 
         // check if the block was broken without the slow breaking process
-        if (!plugin.getDiggersHandler().isDigging(event.getPlayer())) {
+        if (!diggersHandler.isDigging(event.getPlayer())) {
             // check faction aspect
-            if (plugin.getFactionService().canPlayerDestroyInFaction(
+            if (factionService.canPlayerDestroyInFaction(
                     event.getPlayer(), block.getChunk())) {
                 // allow fast break for people with special faction perms
                 event.setCancelled(false);
@@ -63,15 +60,15 @@ public class BlockBreakHandler implements Listener {
                 event.setCancelled(true);
 
                 // apply fatigue to fix fast pickaxe problem
-                plugin.getDiggersHandler().onStartDigging(
-                        new BlockPosition(block.getX(), block.getY(), block.getZ()), event.getPlayer());
+                diggersHandler.onStartDigging(new BlockPosition(
+                        block.getX(), block.getY(), block.getZ()), event.getPlayer());
             }
         } else {
             // still in the process of breaking
             event.setCancelled(true);
 
             // apply fatigue to fix fast pickaxe problem
-            plugin.getDiggersHandler().applyFatigue(event.getPlayer());
+            diggersHandler.applyFatigue(event.getPlayer());
         }
     }
 
@@ -79,63 +76,16 @@ public class BlockBreakHandler implements Listener {
     public void onBlockDestroy(BlockDestroyEvent event)
             throws ChunkBusyException, ChunkNotLoadedException {
         // block durable blocks from getting destroyed by environment
-        plugin.getBlockDurabilityService().clearDurability(event.getBlock());
+        blockDurabilityService.clearDurability(event.getBlock());
     }
 
     @EventHandler
     public void onEntityChangeBlock(EntityChangeBlockEvent event) {
         // block breaking durable blocks by entities
         if (event.getTo() == Material.AIR) {
-            if (plugin.getBlockDurabilityService().hasDurability(event.getBlock())) {
+            if (blockDurabilityService.hasDurability(event.getBlock())) {
                 event.setCancelled(true);
             }
-        }
-    }
-
-    @EventHandler
-    public void onBlockBurn(BlockBurnEvent event) throws ChunkBusyException, ChunkNotLoadedException {
-        // clear durability
-        plugin.getBlockDurabilityService()
-                .clearDurability(event.getBlock());
-    }
-
-    @EventHandler
-    public void onBlockFade(BlockFadeEvent event) throws ChunkBusyException, ChunkNotLoadedException {
-        // clear durability
-        plugin.getBlockDurabilityService()
-                .clearDurability(event.getBlock());
-    }
-
-    @EventHandler
-    public void onBlockPistonExtend(BlockPistonExtendEvent event)
-            throws ChunkBusyException, ChunkNotLoadedException {
-        onBlocksMoveByPiston(event.getBlocks(), event.getDirection());
-    }
-
-    @EventHandler
-    public void onBlockPistonRetract(BlockPistonRetractEvent event)
-            throws ChunkBusyException, ChunkNotLoadedException {
-        onBlocksMoveByPiston(event.getBlocks(), event.getDirection());
-    }
-
-    private void onBlocksMoveByPiston(List<Block> blocks, BlockFace direction)
-            throws ChunkBusyException, ChunkNotLoadedException {
-        for (Block origin : blocks) {
-            // get block durability
-            double durability = plugin.getBlockDurabilityService()
-                    .getDurabilityRelative(origin);
-
-            // skip if durability 0
-            if (durability == 0) {
-                continue;
-            }
-
-            // move durability in direction of the piston extend
-            Block resulting = origin.getRelative(direction);
-            plugin.getBlockDurabilityService().setDurabilityRelative(resulting, durability);
-
-            // clear durability in origin block
-            plugin.getBlockDurabilityService().clearDurability(origin);
         }
     }
 }

@@ -1,5 +1,6 @@
 package me.matoosh.softclaims.faction.factionsx;
 
+import lombok.RequiredArgsConstructor;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import me.matoosh.softclaims.faction.FactionPermission;
@@ -21,13 +22,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@RequiredArgsConstructor
 public class FactionsxImplementation implements IFactionImplementation {
 
     private final SoftClaimsPlugin plugin;
-
-    public FactionsxImplementation(SoftClaimsPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     @Override
     public void registerEvents() {
@@ -46,16 +44,27 @@ public class FactionsxImplementation implements IFactionImplementation {
     /**
      * Gets faction by name.
      *
-     * @param factionName The name of the faction.
+     * @param factionId The name of the faction.
      * @return The faction if found.
      */
     @Override
-    public me.matoosh.softclaims.faction.Faction getFaction(String factionName) {
-        Faction faction = FactionManager.INSTANCE.getFaction(factionName);
+    public me.matoosh.softclaims.faction.Faction getFaction(String factionId)
+            throws FactionDoesntExistException {
+        Faction faction = getFactionById(factionId);
         if (faction == null) {
-            return null;
+            throw new FactionDoesntExistException();
         }
         return toGenericFaction(faction);
+    }
+
+    private Faction getFactionById(String factionId) {
+        long id = Long.parseLong(factionId);
+        Faction faction = FactionManager.INSTANCE.getFaction(id);
+        if (faction.isSystemFaction()) {
+            return null;
+        } else {
+            return faction;
+        }
     }
 
     /**
@@ -96,17 +105,19 @@ public class FactionsxImplementation implements IFactionImplementation {
      * Checks whether the player has a specific permission in the faction.
      *
      * @param player      The player.
-     * @param factionName The name of the faction.
+     * @param factionId The name of the faction.
      * @param permission  The permission.
      * @return Whether the player has the specified permission in the faction.
      */
     @Override
-    public boolean hasPlayerPermission(Player player, String factionName, FactionPermission permission)
+    public boolean hasPlayerPermission(String factionId, Player player, FactionPermission permission)
             throws FactionDoesntExistException {
         // get faction
-        Faction faction = FactionManager.INSTANCE.getFaction(factionName);
+        Faction faction = getFactionById(factionId);
         // check if faction exists
-        if (faction == null) throw new FactionDoesntExistException();
+        if (faction == null) {
+            throw new FactionDoesntExistException();
+        }
 
         // get player's faction
         Faction playerFaction = getFactionByPlayer(player);
@@ -140,32 +151,46 @@ public class FactionsxImplementation implements IFactionImplementation {
     }
 
     @Override
-    public List<Chunk> getAllFactionChunks(String factionName) {
-        Faction faction = FactionManager.INSTANCE.getFaction(factionName);
-        if (faction == null) return Collections.emptyList();
+    public List<Chunk> getAllFactionChunks(String factionId) {
+        Faction faction = getFactionById(factionId);
+        if (faction == null) {
+            return Collections.emptyList();
+        }
         return GridManager.INSTANCE.getAllClaims(faction)
                 .stream().map(FLocation::getChunk)
                 .collect(Collectors.toList());
     }
 
     /**
-     * Claims chunks for a faction.
+     * Claims a chunk for a faction.
      *
-     * @param factionName The name of the faction.
-     * @param chunks      The chunks.
-     * @param player      The player.
+     * @param factionId The id of the faction.
+     * @param chunk     The chunk.
      */
     @Override
-    public void claimChunks(String factionName, Player player, List<Chunk> chunks) throws FactionDoesntExistException {
-        Faction faction = FactionManager.INSTANCE.getFaction(factionName);
+    public void claimChunk(String factionId, Chunk chunk) throws FactionDoesntExistException {
+        Faction faction = getFactionById(factionId);
         if (faction == null) {
             throw new FactionDoesntExistException();
         }
-        GridManager.INSTANCE.claimLand(faction,
-                chunks.parallelStream()
-                    .map(c -> new FLocation(c.getX(), c.getZ(), c.getWorld().getName()))
-                    .toArray(FLocation[]::new),
-                PlayerManager.INSTANCE.getFPlayer(player), true);
+        GridManager.INSTANCE.claim(faction,
+                new FLocation(chunk.getX(), chunk.getZ(), chunk.getWorld().getName()));
+    }
+
+    /**
+     * Unclaims a chunk for a faction.
+     *
+     * @param factionId The id of the faction.
+     * @param chunk     The chunk.
+     */
+    @Override
+    public void unclaimChunk(String factionId, Chunk chunk) throws FactionDoesntExistException {
+        Faction faction = getFactionById(factionId);
+        if (faction == null) {
+            throw new FactionDoesntExistException();
+        }
+        GridManager.INSTANCE.unclaim(faction,
+                new FLocation(chunk.getX(), chunk.getZ(), chunk.getWorld().getName()));
     }
 
     /**
@@ -175,7 +200,8 @@ public class FactionsxImplementation implements IFactionImplementation {
      */
     public me.matoosh.softclaims.faction.Faction toGenericFaction(Faction faction) {
         return new me.matoosh.softclaims.faction.Faction(
-                faction.getTag(), faction.getPower(), faction.isSystemFaction());
+                faction.getId() + "", faction.getTag(),
+                faction.getPower(), faction.isSystemFaction());
     }
 
     /**

@@ -1,5 +1,6 @@
 package me.matoosh.softclaims.faction.factionsx;
 
+import lombok.RequiredArgsConstructor;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.MSG;
@@ -12,14 +13,11 @@ import org.bukkit.event.Listener;
 
 import java.util.List;
 
+@RequiredArgsConstructor
 public class FactionsxEventHandler implements Listener {
 
     private final SoftClaimsPlugin plugin;
-
-    public FactionsxEventHandler(SoftClaimsPlugin plugin) {
-        this.plugin = plugin;
-    }
-
+    
     /**
      * Called when a player tries to claim a chunk.
      * @param event

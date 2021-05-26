@@ -5,17 +5,20 @@ import co.aikar.commands.annotation.CommandAlias;
 import co.aikar.commands.annotation.CommandPermission;
 import co.aikar.commands.annotation.Default;
 import co.aikar.commands.annotation.Subcommand;
+import lombok.RequiredArgsConstructor;
 import me.matoosh.softclaims.MSG;
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import me.matoosh.softclaims.service.BlockRepairService;
+import me.matoosh.softclaims.service.WorldService;
 import org.bukkit.command.CommandSender;
 
 @CommandAlias("softclaims")
+@RequiredArgsConstructor
 public class SoftClaimsCommand extends BaseCommand {
-    private final SoftClaimsPlugin plugin;
 
-    public SoftClaimsCommand(SoftClaimsPlugin plugin) {
-        this.plugin = plugin;
-    }
+    private final BlockRepairService blockRepairService;
+    private final WorldService worldService;
+    private final SoftClaimsPlugin plugin;
 
     @Default
     public void onDefault(CommandSender sender) {
@@ -26,11 +29,11 @@ public class SoftClaimsCommand extends BaseCommand {
     @CommandPermission("softclaims.reload")
     public void onReload(CommandSender sender) {
         // reload config
-        this.plugin.reloadConfig();
+        plugin.reloadConfig();
 
         // reload reloadables
-        this.plugin.getBlockRepairService().reload();
-        this.plugin.getWorldService().reload();
+        blockRepairService.reload();
+        worldService.reload();
 
         MSG.send(sender, "Plugin was reloaded successfully!");
     }

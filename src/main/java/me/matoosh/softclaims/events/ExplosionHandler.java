@@ -1,8 +1,12 @@
 package me.matoosh.softclaims.events;
 
+import lombok.RequiredArgsConstructor;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import me.matoosh.softclaims.service.BlockDurabilityService;
+import me.matoosh.softclaims.service.FactionService;
+import me.matoosh.softclaims.service.WorldService;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
@@ -16,15 +20,15 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
+@RequiredArgsConstructor
 public class ExplosionHandler implements Listener {
-
-    private final SoftClaimsPlugin plugin;
 
     private static final int EXPLOSION_RADIUS = 3;
 
-    public ExplosionHandler(SoftClaimsPlugin plugin) {
-        this.plugin = plugin;
-    }
+    private final BlockDurabilityService blockDurabilityService;
+    private final FactionService factionService;
+    private final WorldService worldService;
+    private final SoftClaimsPlugin plugin;
 
     @EventHandler
     public void onEntityExplosion(EntityExplodeEvent event) {
@@ -41,8 +45,7 @@ public class ExplosionHandler implements Listener {
     private void onExplosion(List<Block> blockList, Location location,
                              Function<Void, Integer> powerFunction) {
         // check if this world is disabled
-        if (plugin.getConfig().getStringList("disabledWorlds")
-                .contains(location.getWorld().getName())) {
+        if (worldService.isWorldDisabled(location.getWorld())) {
             return;
         }
 
@@ -59,11 +62,11 @@ public class ExplosionHandler implements Listener {
             }
 
             // check if block could be durable
-            if (plugin.getBlockDurabilityService().getTotalDurability(block.getType()) > 0) {
+            if (blockDurabilityService.getTotalDurability(block.getType()) > 0) {
                 // durable block
                 // check chunk
                 boolean act = actChunks.contains(block.getChunk());
-                if (!act && !plugin.getFactionService().isInFactionLand(block.getChunk())) {
+                if (!act && !factionService.isInFactionLand(block.getChunk())) {
                     skipChunks.add(block.getChunk());
                     continue;
                 } else if (!act) {
@@ -93,7 +96,7 @@ public class ExplosionHandler implements Listener {
                         Block block = location.clone().add(x, y, z).getBlock();
                         if (block.getType().getBlastResistance() >= 1200) {
                             // block that doesnt appear in the normal explosion list
-                            if (plugin.getBlockDurabilityService().hasDurability(block)) {
+                            if (blockDurabilityService.hasDurability(block)) {
                                 durableBlocks.add(block);
                             }
                         }
@@ -112,7 +115,7 @@ public class ExplosionHandler implements Listener {
             for (Block b : durableBlocks) {
                 int durability;
                 try {
-                    durability = plugin.getBlockDurabilityService().getDurabilityAbsolute(b);
+                    durability = blockDurabilityService.getDurabilityAbsolute(b);
                 } catch (ChunkBusyException | ChunkNotLoadedException e) {
                     continue;
                 }
@@ -127,14 +130,14 @@ public class ExplosionHandler implements Listener {
                 if(durability > 0) {
                     // update durability
                     try {
-                        plugin.getBlockDurabilityService().setDurabilityAbsolute(b, durability);
+                        blockDurabilityService.setDurabilityAbsolute(b, durability);
                     } catch (ChunkBusyException | ChunkNotLoadedException e) {
                         e.printStackTrace();
                     }
                 } else {
                     // block exploded
                     try {
-                        plugin.getBlockDurabilityService().clearDurability(b);
+                        blockDurabilityService.clearDurability(b);
                     } catch (ChunkBusyException | ChunkNotLoadedException ignored) {
                         // cant happen cause the chunk must be loaded for explosion
                     }

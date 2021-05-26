@@ -1,5 +1,6 @@
 package me.matoosh.softclaims.service;
 
+import lombok.RequiredArgsConstructor;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
@@ -19,8 +20,11 @@ import java.util.stream.Collectors;
 /**
  * Manages automatic repair of blocks based on the faction power.
  */
+@RequiredArgsConstructor
 public class BlockRepairService implements IReloadable {
 
+    private final FactionService factionService;
+    private final BlockDurabilityService blockDurabilityService;
     private final SoftClaimsPlugin plugin;
 
     /**
@@ -47,10 +51,6 @@ public class BlockRepairService implements IReloadable {
      * Task for playing block heal animations.
      */
     private BukkitTask repairAnimationTask;
-
-    public BlockRepairService(SoftClaimsPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     @Override
     public void reload() {
@@ -87,11 +87,10 @@ public class BlockRepairService implements IReloadable {
         }
 
         // repair blocks for every faction
-        List<Faction> factions = plugin.getFactionService().getAllFactions();
+        List<Faction> factions = factionService.getAllFactions();
         for (Faction faction : factions) {
             // get faction chunks
-            List<Chunk> factionChunks = plugin.getFactionService()
-                    .getAllFactionChunks(faction.getName());
+            List<Chunk> factionChunks = factionService.getAllFactionChunks(faction.getId());
 
             // calculate faction chunk influence
             int chunkInfluence = (int) (faction.getPower() - factionChunks.size());
@@ -115,8 +114,7 @@ public class BlockRepairService implements IReloadable {
                 try {
                     healedBlocks.put(
                         factionChunk,
-                        plugin.getBlockDurabilityService()
-                        .modifyDurabilitiesInChunk(factionChunk, repairDeltaAdjusted)
+                        blockDurabilityService.modifyDurabilitiesInChunk(factionChunk, repairDeltaAdjusted)
                         .stream().map((s) -> {
                             String[] posUnparsed = s.split(",");
                             return new int[]{

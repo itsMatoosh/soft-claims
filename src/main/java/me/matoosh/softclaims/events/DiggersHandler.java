@@ -1,6 +1,7 @@
 package me.matoosh.softclaims.events;
 
 import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.ProtocolManager;
 import com.comphenix.protocol.events.ListeningWhitelist;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
@@ -8,9 +9,13 @@ import com.comphenix.protocol.events.PacketListener;
 import com.comphenix.protocol.injector.GamePhase;
 import com.comphenix.protocol.wrappers.BlockPosition;
 import com.comphenix.protocol.wrappers.EnumWrappers;
+import lombok.RequiredArgsConstructor;
 import me.matoosh.blockmetadata.exception.ChunkBusyException;
 import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import me.matoosh.softclaims.service.BlockDurabilityService;
+import me.matoosh.softclaims.service.CommunicationService;
+import me.matoosh.softclaims.service.FactionService;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -32,15 +37,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@RequiredArgsConstructor
 public class DiggersHandler implements PacketListener, Listener {
-    private final SoftClaimsPlugin plugin;
-    private final HashMap<Integer, DigProgress> diggers = new HashMap<>();
-    private final PotionEffect fatigueEffect = new PotionEffect(
+    private static final PotionEffect FATIGUE_EFFECT = new PotionEffect(
             PotionEffectType.SLOW_DIGGING, 120, 3, false, false);
 
-    public DiggersHandler(SoftClaimsPlugin plugin) {
-        this.plugin = plugin;
-    }
+    private final FactionService factionService;
+    private final BlockDurabilityService blockDurabilityService;
+    private final CommunicationService communicationService;
+    private final ProtocolManager protocolManager;
+    private final SoftClaimsPlugin plugin;
+
+    private final HashMap<Integer, DigProgress> diggers = new HashMap<>();
 
     @Override
     public void onPacketSending(PacketEvent packetEvent) {}
@@ -76,15 +84,14 @@ public class DiggersHandler implements PacketListener, Listener {
 
         // allow fast-break if the player
         // has appropriate faction perms
-        if (plugin.getFactionService().canPlayerDestroyInFaction(
-                player, block.getChunk())) {
+        if (factionService.canPlayerDestroyInFaction(player, block.getChunk())) {
             return;
         }
 
         // get block durability
         int blockDurability;
         try {
-            blockDurability = plugin.getBlockDurabilityService().getDurabilityAbsolute(block);
+            blockDurability = blockDurabilityService.getDurabilityAbsolute(block);
         } catch (ChunkBusyException | ChunkNotLoadedException e) {
             return;
         }
@@ -143,7 +150,7 @@ public class DiggersHandler implements PacketListener, Listener {
             setDigProgress(player,
                     digProgress.getPosition(),
                     digProgress.getAnimationProgress());
-            plugin.getCommunicationService().showDurability(
+            communicationService.showDurability(
                     player,
                     digProgress.getCurrentDurability(),
                     digProgress.getTotalDurability());
@@ -215,7 +222,7 @@ public class DiggersHandler implements PacketListener, Listener {
      */
     public void applyFatigue(Player player) {
         Bukkit.getScheduler().runTask(plugin, () -> {
-            player.addPotionEffect(fatigueEffect);
+            player.addPotionEffect(FATIGUE_EFFECT);
         });
     }
 
@@ -248,7 +255,7 @@ public class DiggersHandler implements PacketListener, Listener {
                         .getNearbyPlayers(20).forEach((p) -> {
             // send
             try {
-                plugin.getProtocolManager().sendServerPacket(p, packetContainer);
+                protocolManager.sendServerPacket(p, packetContainer);
             } catch (InvocationTargetException e) {
                 e.printStackTrace();
             }

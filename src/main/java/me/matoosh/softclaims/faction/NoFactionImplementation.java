@@ -26,11 +26,11 @@ public class NoFactionImplementation implements IFactionImplementation {
     /**
      * Gets faction by name.
      *
-     * @param factionName The name of the faction.
+     * @param factionId The name of the faction.
      * @return The faction if found.
      */
     @Override
-    public Faction getFaction(String factionName) {
+    public Faction getFaction(String factionId) {
         return null;
     }
 
@@ -65,28 +65,38 @@ public class NoFactionImplementation implements IFactionImplementation {
      * @return Whether the player has the specified permission in the faction.
      */
     @Override
-    public boolean hasPlayerPermission(Player player, String factionName, FactionPermission permission) {
+    public boolean hasPlayerPermission(String factionName, Player player, FactionPermission permission) {
         return true;
     }
 
     /**
      * Lists all chunks claimed by factions.
      *
-     * @param factionName The faction to get chunks for.
+     * @param factionId The faction to get chunks for.
      * @return All chunks claimed by factions.
      */
     @Override
-    public List<Chunk> getAllFactionChunks(String factionName) {
+    public List<Chunk> getAllFactionChunks(String factionId) {
         return Collections.emptyList();
     }
 
     /**
-     * Claims chunks for a faction.
+     * Claims a chunk for a faction.
      *
-     * @param factionName The name of the faction.
-     * @param player      The claiming player.
-     * @param chunks      The chunks.
+     * @param factionId The id of the faction.
+     * @param chunk     The chunk.
      */
     @Override
-    public void claimChunks(String factionName, Player player, List<Chunk> chunks) { }
+    public void claimChunk(String factionId, Chunk chunk) {
+    }
+
+    /**
+     * Unclaims a chunk for a faction.
+     *
+     * @param factionId The id of the faction.
+     * @param chunk     The chunk.
+     */
+    @Override
+    public void unclaimChunk(String factionId, Chunk chunk) {
+    }
 }

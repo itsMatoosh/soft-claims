@@ -1,5 +1,6 @@
 package me.matoosh.softclaims.service;
 
+import lombok.RequiredArgsConstructor;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import me.matoosh.softclaims.faction.Faction;
@@ -13,15 +14,12 @@ import org.bukkit.entity.Player;
 
 import java.util.List;
 
+@RequiredArgsConstructor
 public class FactionService {
 
     private final SoftClaimsPlugin plugin;
 
     private IFactionImplementation factionImplementation;
-
-    public FactionService(SoftClaimsPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     public void initialize() {
         if (Bukkit.getPluginManager().isPluginEnabled("FactionsX")) {
@@ -36,11 +34,11 @@ public class FactionService {
 
     /**
      * Gets faction by name.
-     * @param factionName The name of the faction.
+     * @param factionId The name of the faction.
      * @return The faction if found.
      */
-    public Faction getFaction(String factionName) {
-        return factionImplementation.getFaction(factionName);
+    public Faction getFaction(String factionId) throws FactionDoesntExistException {
+        return factionImplementation.getFaction(factionId);
     }
 
     /**
@@ -87,7 +85,7 @@ public class FactionService {
 
         // get player's permission to destroy
         try {
-            return hasPlayerPermission(player, faction.getName(), FactionPermission.BREAK_BLOCK);
+            return hasPlayerPermission(faction.getId(), player, FactionPermission.BREAK_BLOCK);
         } catch (FactionDoesntExistException e) {
             return true;
         }
@@ -96,13 +94,13 @@ public class FactionService {
     /**
      * Checks whether the player has a specific permission in the faction.
      * @param player The player.
-     * @param factionName The name of the faction.
+     * @param factionId The name of the faction.
      * @param permission The permission.
      * @return Whether the player has the specified permission in the faction.
      */
-    public boolean hasPlayerPermission(Player player, String factionName, FactionPermission permission)
+    public boolean hasPlayerPermission(String factionId, Player player, FactionPermission permission)
             throws FactionDoesntExistException {
-        return factionImplementation.hasPlayerPermission(player, factionName, permission);
+        return factionImplementation.hasPlayerPermission(factionId, player, permission);
     }
 
     /**
@@ -115,21 +113,30 @@ public class FactionService {
 
     /**
      * Lists all chunks claimed by factions.
-     * @param factionName The faction to get chunks for.
+     * @param factionId The faction to get chunks for.
      * @return All chunks claimed by factions.
      */
-    public List<Chunk> getAllFactionChunks(String factionName) {
-        return factionImplementation.getAllFactionChunks(factionName);
+    public List<Chunk> getAllFactionChunks(String factionId) {
+        return factionImplementation.getAllFactionChunks(factionId);
     }
 
     /**
-     * Claims chunks for a faction.
-     * @param chunks The chunks.
-     * @param player The claiming player.
-     * @param factionName The name of the faction.
+     * Claims a chunk for a faction.
+     * @param chunk The chunk.
+     * @param factionId The name of the faction.
      */
-    public void claimChunks(String factionName, Player player, List<Chunk> chunks)
+    public void claimChunk(String factionId, Chunk chunk)
             throws FactionDoesntExistException {
-        factionImplementation.claimChunks(factionName, player, chunks);
+        factionImplementation.claimChunk(factionId, chunk);
+    }
+
+    /**
+     * Unclaims a chunk for a faction.
+     * @param chunk The chunk.
+     * @param factionId The name of the faction.
+     */
+    public void unclaimChunk(String factionId, Chunk chunk)
+            throws FactionDoesntExistException {
+        factionImplementation.unclaimChunk(factionId, chunk);
     }
 }
