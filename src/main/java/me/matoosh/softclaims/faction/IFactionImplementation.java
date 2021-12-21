@@ -2,6 +2,7 @@ package me.matoosh.softclaims.faction;
 
 import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import org.bukkit.Chunk;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 
 import java.util.List;
@@ -30,14 +31,14 @@ public interface IFactionImplementation {
      * @param factionChunk A chunk that belongs to the faction.
      * @return The faction if found.
      */
-    Faction getFaction(Chunk factionChunk);
+    Faction getFaction(Chunk factionChunk) throws FactionDoesntExistException;
 
     /**
      * Gets the faction which the specified player is a member of.
      * @param factionMember The player.
      * @return The faction if found.
      */
-    Faction getFaction(Player factionMember);
+    Faction getFaction(Player factionMember) throws FactionDoesntExistException;
 
     /**
      * Checks whether the player has a specific permission in the faction.
@@ -54,19 +55,19 @@ public interface IFactionImplementation {
      * @param factionId The faction to get chunks for.
      * @return All chunks claimed by factions.
      */
-    List<Chunk> getAllFactionChunks(String factionId);
+    List<Chunk> getAllFactionChunks(String factionId) throws FactionDoesntExistException;
 
     /**
      * Claims a chunk for a faction.
      * @param chunk The chunk.
      * @param factionId The id of the faction.
      */
-    void claimChunk(String factionId, Chunk chunk) throws FactionDoesntExistException;
+    void claimChunk(String factionId, World world, int chunkX, int chunkZ) throws FactionDoesntExistException;
 
     /**
      * Unclaims a chunk for a faction.
      * @param chunk The chunk.
      * @param factionId The id of the faction.
      */
-    void unclaimChunk(String factionId, Chunk chunk) throws FactionDoesntExistException;
+    void unclaimChunk(String factionId, World world, int chunkX, int chunkZ) throws FactionDoesntExistException;
 }

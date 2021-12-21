@@ -32,7 +32,7 @@ public class WorldService implements IReloadable {
      * @param world The world.
      * @return Whether the given world is disabled.
      */
-    public boolean isWorldDisabled (World world) {
+    public boolean isWorldDisabled(World world) {
         return disabledWorlds.contains(world.getName());
     }
 }

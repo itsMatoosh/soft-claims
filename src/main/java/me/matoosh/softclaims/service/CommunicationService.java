@@ -1,10 +1,18 @@
 package me.matoosh.softclaims.service;
 
+import me.matoosh.softclaims.SoftClaimsPlugin;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.entity.Player;
 
 public class CommunicationService {
+
+    private final SoftClaimsPlugin plugin;
+
+    public CommunicationService(SoftClaimsPlugin plugin) {
+        this.plugin = plugin;
+    }
+
     /**
      * Shows the current block durability to the player.
      * @param player
@@ -19,9 +27,7 @@ public class CommunicationService {
         int remainder = percent % 10;
 
         // full bars
-        for (int i = 0; i < fullBars; i++) {
-            progressBar.append("█");
-        }
+        progressBar.append("█".repeat(Math.max(0, fullBars)));
 
         // partial bars
         int offset = 0;
@@ -34,9 +40,7 @@ public class CommunicationService {
         }
 
         // blank space
-        for (int i = 0; i < 10 - fullBars - offset; i++) {
-            progressBar.append("  ");
-        }
+        progressBar.append("  ".repeat(Math.max(0, 10 - fullBars - offset)));
 
         // action bar
 //        TextComponent durabilityComponent = new TextComponent("Durability: " + durability);
@@ -53,7 +57,8 @@ public class CommunicationService {
 //        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, durabilityComponent, separatorComponent,
 //                progressBarOpenerComponent, progressBarComponent, progressBarCloserComponent);
 
-        player.sendActionBar(Component.join(
+        plugin.getAdventure().player(player)
+                .sendActionBar(Component.join(
                 Component.text(" | ", TextColor.fromHexString("#bababa")),
                 Component.text("Durability: " + durability, TextColor.fromHexString("#f44e07")),
                 Component.join(Component.empty(),

@@ -7,9 +7,10 @@ import me.matoosh.softclaims.faction.Faction;
 import me.matoosh.softclaims.faction.FactionPermission;
 import me.matoosh.softclaims.faction.IFactionImplementation;
 import me.matoosh.softclaims.faction.NoFactionImplementation;
-import me.matoosh.softclaims.faction.factionsx.FactionsxImplementation;
+import me.matoosh.softclaims.faction.saberfactions.SaberFactionsImplementation;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 
 import java.util.List;
@@ -22,8 +23,8 @@ public class FactionService {
     private IFactionImplementation factionImplementation;
 
     public void initialize() {
-        if (Bukkit.getPluginManager().isPluginEnabled("FactionsX")) {
-            factionImplementation = new FactionsxImplementation(plugin);
+        if (Bukkit.getPluginManager().isPluginEnabled("Factions")) {
+            factionImplementation = new SaberFactionsImplementation(plugin);
         } else {
             factionImplementation = new NoFactionImplementation();
         }
@@ -46,7 +47,7 @@ public class FactionService {
      * @param factionChunk A chunk that belongs to the faction.
      * @return The faction if found.
      */
-    public Faction getFaction(Chunk factionChunk) {
+    public Faction getFaction(Chunk factionChunk) throws FactionDoesntExistException {
         return factionImplementation.getFaction(factionChunk);
     }
 
@@ -55,7 +56,7 @@ public class FactionService {
      * @param factionMember The player.
      * @return The faction if found.
      */
-    public Faction getFaction(Player factionMember) {
+    public Faction getFaction(Player factionMember) throws FactionDoesntExistException {
         return factionImplementation.getFaction(factionMember);
     }
 
@@ -65,8 +66,11 @@ public class FactionService {
      * @return Whether the chunk is in faction land.
      */
     public boolean isInFactionLand(Chunk chunk) {
-        Faction faction = getFaction(chunk);
-        return faction != null;
+        try {
+            return getFaction(chunk) != null;
+        } catch (FactionDoesntExistException e) {
+            return false;
+        }
     }
 
     /**
@@ -78,14 +82,16 @@ public class FactionService {
      */
     public boolean canPlayerDestroyInFaction(Player player, Chunk factionChunk) {
         // get faction at chunk
-        Faction faction = getFaction(factionChunk);
-        if (faction == null) {
+        Faction faction;
+        try {
+            faction = getFaction(factionChunk);
+        } catch (FactionDoesntExistException e) {
             return true;
         }
 
         // get player's permission to destroy
         try {
-            return hasPlayerPermission(faction.getId(), player, FactionPermission.BREAK_BLOCK);
+            return hasPlayerPermission(faction.id(), player, FactionPermission.BREAK_BLOCK);
         } catch (FactionDoesntExistException e) {
             return true;
         }
@@ -116,7 +122,7 @@ public class FactionService {
      * @param factionId The faction to get chunks for.
      * @return All chunks claimed by factions.
      */
-    public List<Chunk> getAllFactionChunks(String factionId) {
+    public List<Chunk> getAllFactionChunks(String factionId) throws FactionDoesntExistException {
         return factionImplementation.getAllFactionChunks(factionId);
     }
 
@@ -125,9 +131,9 @@ public class FactionService {
      * @param chunk The chunk.
      * @param factionId The name of the faction.
      */
-    public void claimChunk(String factionId, Chunk chunk)
+    public void claimChunk(String factionId, World world, int chunkX, int chunkZ)
             throws FactionDoesntExistException {
-        factionImplementation.claimChunk(factionId, chunk);
+        factionImplementation.claimChunk(factionId, world, chunkX, chunkZ);
     }
 
     /**
@@ -135,8 +141,8 @@ public class FactionService {
      * @param chunk The chunk.
      * @param factionId The name of the faction.
      */
-    public void unclaimChunk(String factionId, Chunk chunk)
+    public void unclaimChunk(String factionId, World world, int chunkX, int chunkZ)
             throws FactionDoesntExistException {
-        factionImplementation.unclaimChunk(factionId, chunk);
+        factionImplementation.unclaimChunk(factionId, world, chunkX, chunkZ);
     }
 }

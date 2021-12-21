@@ -1,9 +1,8 @@
 package me.matoosh.softclaims.service;
 
 import lombok.RequiredArgsConstructor;
-import me.matoosh.blockmetadata.exception.ChunkBusyException;
-import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import me.matoosh.softclaims.faction.Faction;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -70,17 +69,17 @@ public class BlockRepairService implements IReloadable {
         // set the heal frequency
         int frequency = 20 * plugin.getConfig().getInt("repair.repairFrequency", 300);
         this.repairTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
-                plugin, this::repairBlocksTask, frequency, frequency);
+                plugin, this::repairTick, frequency, frequency);
 
         // run the repair animations every 10 ticks
         this.repairAnimationTask = Bukkit.getScheduler().runTaskTimer(
-                plugin, this::repairTick, 10, 10);
+                plugin, this::repairAnimationTick, 10, 10);
     }
 
     /**
      * Runs asynchronously and heals faction blocks.
      */
-    private void repairBlocksTask() {
+    private void repairTick() {
         // get repair delta
         if (repairDelta == 0) {
             return;
@@ -90,18 +89,19 @@ public class BlockRepairService implements IReloadable {
         List<Faction> factions = factionService.getAllFactions();
         for (Faction faction : factions) {
             // get faction chunks
-            List<Chunk> factionChunks = factionService.getAllFactionChunks(faction.getId());
+            List<Chunk> factionChunks = null;
+            try {
+                factionChunks = factionService.getAllFactionChunks(faction.id());
+            } catch (FactionDoesntExistException ignored) {
+            }
 
             // calculate faction chunk influence
-            int chunkInfluence = (int) (faction.getPower() - factionChunks.size());
+            int powerSaturation = (int) (faction.power() - factionChunks.size());
 
             // calculate repair delta
-            int repairDeltaAdjusted;
-            if (chunkInfluence >= 0) {
+            int repairDeltaAdjusted = 0;
+            if (powerSaturation >= 0) {
                 repairDeltaAdjusted = repairDelta;
-            } else {
-                repairDeltaAdjusted = (int) (repairDelta *
-                        ((double) (factionChunks.size() + repairDelta) / (double) factionChunks.size()));
             }
 
             // skip if no repair
@@ -111,19 +111,18 @@ public class BlockRepairService implements IReloadable {
 
             // heal blocks
             for (Chunk factionChunk : factionChunks) {
-                try {
-                    healedBlocks.put(
-                        factionChunk,
-                        blockDurabilityService.modifyDurabilitiesInChunk(factionChunk, repairDeltaAdjusted)
-                        .stream().map((s) -> {
-                            String[] posUnparsed = s.split(",");
-                            return new int[]{
+                blockDurabilityService.modifyDurabilitiesInChunk(factionChunk, repairDeltaAdjusted)
+                .thenApply((modified) -> {
+                    healedBlocks.put(factionChunk, modified.stream().map((s) -> {
+                        String[] posUnparsed = s.split(",");
+                        return new int[]{
                                 Integer.parseInt(posUnparsed[0]),
                                 Integer.parseInt(posUnparsed[1]),
                                 Integer.parseInt(posUnparsed[2])
-                            };
-                        }).collect(Collectors.toCollection(LinkedList::new)));
-                } catch (ChunkBusyException | ChunkNotLoadedException ignored) {}
+                        };
+                    }).collect(Collectors.toCollection(LinkedList::new)));
+                    return null;
+                });
             }
         }
     }
@@ -132,7 +131,7 @@ public class BlockRepairService implements IReloadable {
      * Called every 10 ticks.
      * Shows block animations for healed blocks.
      */
-    public void repairTick() {
+    public void repairAnimationTick() {
         // check if healed blocks empty
         if (healedBlocks.size() == 0) {
             return;
@@ -181,19 +180,13 @@ public class BlockRepairService implements IReloadable {
      * @return The block face.
      */
     private BlockFace blockFaceFromInt(int i) {
-        switch(i) {
-            default:
-                return BlockFace.UP;
-            case 1:
-                return BlockFace.DOWN;
-            case 2:
-                return BlockFace.NORTH;
-            case 3:
-                return BlockFace.SOUTH;
-            case 4:
-                return BlockFace.EAST;
-            case 5:
-                return BlockFace.WEST;
-        }
+        return switch (i) {
+            default -> BlockFace.UP;
+            case 1 -> BlockFace.DOWN;
+            case 2 -> BlockFace.NORTH;
+            case 3 -> BlockFace.SOUTH;
+            case 4 -> BlockFace.EAST;
+            case 5 -> BlockFace.WEST;
+        };
     }
 }

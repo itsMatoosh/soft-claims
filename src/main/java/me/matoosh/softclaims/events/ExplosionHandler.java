@@ -1,8 +1,6 @@
 package me.matoosh.softclaims.events;
 
 import lombok.RequiredArgsConstructor;
-import me.matoosh.blockmetadata.exception.ChunkBusyException;
-import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.service.BlockDurabilityService;
 import me.matoosh.softclaims.service.FactionService;
@@ -45,7 +43,7 @@ public class ExplosionHandler implements Listener {
     private void onExplosion(List<Block> blockList, Location location,
                              Function<Void, Integer> powerFunction) {
         // check if this world is disabled
-        if (worldService.isWorldDisabled(location.getWorld())) {
+        if (location.getWorld() == null || worldService.isWorldDisabled(location.getWorld())) {
             return;
         }
 
@@ -62,7 +60,7 @@ public class ExplosionHandler implements Listener {
             }
 
             // check if block could be durable
-            if (blockDurabilityService.getTotalDurability(block.getType()) > 0) {
+            if (blockDurabilityService.isMaterialDurable(block.getType())) {
                 // durable block
                 // check chunk
                 boolean act = actChunks.contains(block.getChunk());
@@ -91,8 +89,6 @@ public class ExplosionHandler implements Listener {
             for (int x = -EXPLOSION_RADIUS; x <= EXPLOSION_RADIUS; x++) {
                 for (int y = -EXPLOSION_RADIUS; y <= EXPLOSION_RADIUS; y++) {
                     for (int z = -EXPLOSION_RADIUS; z <= EXPLOSION_RADIUS; z++) {
-                        if (x == 0 && y == 0 && z == 0) continue;
-
                         Block block = location.clone().add(x, y, z).getBlock();
                         if (block.getType().getBlastResistance() >= 1200) {
                             // block that doesnt appear in the normal explosion list
@@ -111,42 +107,32 @@ public class ExplosionHandler implements Listener {
             int power = powerFunction.apply(null);
 
             // apply damage to blocks
-            List<Block> destroyedBlocks = new ArrayList<>();
-            for (Block b : durableBlocks) {
-                int durability;
-                try {
-                    durability = blockDurabilityService.getDurabilityAbsolute(b);
-                } catch (ChunkBusyException | ChunkNotLoadedException e) {
-                    continue;
-                }
-
-                // calculate damage to block based on distance
-                // to the center of the explosion
-                double dist = location.distance(b.getLocation().add(0.5, 0.5, 0.5)) - 1;
-                // 2 and 0.7 ensure that explosion 1 block away from the block
-                // damaged the block with the full power. Explosions inside of the
-                // block will result in double the power being exerted.
-                durability -= power * Math.exp(-dist);
-                if(durability > 0) {
-                    // update durability
-                    try {
+            List<Block> destroyedBlocks = Collections.synchronizedList(new ArrayList<>());
+            CompletableFuture<Void>[] futures = new CompletableFuture[durableBlocks.size()];
+            for (int i = 0; i < durableBlocks.size(); i++) {
+                Block b = durableBlocks.get(i);
+                futures[i] = blockDurabilityService.getDurabilityAbsolute(b).thenApply((durability) -> {
+                    // calculate damage to block based on distance
+                    // to the center of the explosion
+                    double dist = location.distance(b.getLocation().add(0.5, 0.5, 0.5)) - 1;
+                    // 2 and 0.7 ensure that explosion 1 block away from the block
+                    // damaged the block with the full power. Explosions inside of the
+                    // block will result in double the power being exerted.
+                    durability -= (int) (power * Math.exp(-dist));
+                    if(durability > 0) {
+                        // update durability
                         blockDurabilityService.setDurabilityAbsolute(b, durability);
-                    } catch (ChunkBusyException | ChunkNotLoadedException e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    // block exploded
-                    try {
+                    } else {
+                        // block exploded
                         blockDurabilityService.clearDurability(b);
-                    } catch (ChunkBusyException | ChunkNotLoadedException ignored) {
-                        // cant happen cause the chunk must be loaded for explosion
+                        destroyedBlocks.add(b);
                     }
-                    destroyedBlocks.add(b);
-                }
+                    return null;
+                });
             }
-
             // break blocks
-            Bukkit.getScheduler().runTask(plugin, () -> destroyedBlocks.forEach(Block::breakNaturally));
+            CompletableFuture.allOf(futures).thenRun(() -> Bukkit.getScheduler()
+                    .runTask(plugin, () -> destroyedBlocks.forEach(Block::breakNaturally)));
         });
 
     }

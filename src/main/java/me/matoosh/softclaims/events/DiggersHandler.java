@@ -9,13 +9,14 @@ import com.comphenix.protocol.events.PacketListener;
 import com.comphenix.protocol.injector.GamePhase;
 import com.comphenix.protocol.wrappers.BlockPosition;
 import com.comphenix.protocol.wrappers.EnumWrappers;
+import io.papermc.lib.PaperLib;
 import lombok.RequiredArgsConstructor;
-import me.matoosh.blockmetadata.exception.ChunkBusyException;
-import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
+import lombok.SneakyThrows;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.service.BlockDurabilityService;
 import me.matoosh.softclaims.service.CommunicationService;
 import me.matoosh.softclaims.service.FactionService;
+import me.matoosh.softclaims.util.LocationUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -24,7 +25,8 @@ import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -33,14 +35,23 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public class DiggersHandler implements PacketListener, Listener {
+    /**
+     * Maximum distance one can dig at.
+     */
+    private static final int DIG_MAX_DISTANCE = 7;
+
+    /**
+     * Effect applied to slow down player digging.
+     */
     private static final PotionEffect FATIGUE_EFFECT = new PotionEffect(
-            PotionEffectType.SLOW_DIGGING, 120, 3, false, false);
+            PotionEffectType.SLOW_DIGGING, 150, 3, false, false);
 
     private final FactionService factionService;
     private final BlockDurabilityService blockDurabilityService;
@@ -75,50 +86,104 @@ public class DiggersHandler implements PacketListener, Listener {
         }
     }
 
+
+    @EventHandler
+    public void onPlayerTeleport(PlayerTeleportEvent event) {
+        onStopDigging(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        onStopDigging(event.getEntity());
+    }
+
+    @EventHandler
+    public void onPlayerEnterBed(PlayerBedEnterEvent event) {
+        onStopDigging(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onPlayerItemBreak(PlayerItemBreakEvent event) {
+        onStopDigging(event.getPlayer());
+    }
+
+    @EventHandler
+    public void onPlayerMove(PlayerMoveEvent event) {
+        // check if the player is digging
+        DigProgress progress = diggers.get(event.getPlayer().getEntityId());
+        if (progress != null) {
+            // check distance from the player to the block
+            int dx = event.getTo().getBlockX() - progress.getBlock().getX();
+            int dy = event.getTo().getBlockY() - progress.getBlock().getY();
+            int dz = event.getTo().getBlockZ() - progress.getBlock().getZ();
+            double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (distance > DIG_MAX_DISTANCE) {
+                onStopDigging(event.getPlayer());
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerDisconnect(PlayerQuitEvent event) {
+        // cancel dig task for leaving player
+        onStopDigging(event.getPlayer());
+    }
+
     /**
      * Called when a player starts digging.
      */
+    @SneakyThrows
     public void onStartDigging(BlockPosition position, Player player) {
+        // make sure no duplicate digging tasks are running
+        onStopDigging(player);
+
         // get block
         Block block = player.getWorld().getBlockAt(position.getX(), position.getY(), position.getZ());
 
-        // allow fast-break if the player
-        // has appropriate faction perms
+        // allow fast-break if the player has appropriate faction perms
         if (factionService.canPlayerDestroyInFaction(player, block.getChunk())) {
             return;
         }
 
-        // get block durability
-        int blockDurability;
-        try {
-            blockDurability = blockDurabilityService.getDurabilityAbsolute(block);
-        } catch (ChunkBusyException | ChunkNotLoadedException e) {
-            return;
-        }
-        if (blockDurability == 0) return;
-
-        // apply fatigue
-        Bukkit.getScheduler().runTask(
-                plugin, () -> applyFatigue(player));
-
-        // make sure no duplicate digging tasks are running
-        onStopDigging(player);
-
         // get tool, its digging power, and enchantments
         ItemStack tool = player.getInventory().getItemInMainHand();
-        int toolPower = 1;
-        int toolEfficiency = 0;
-        if (tool.getAmount() > 0) {
-            toolPower = (int)block.getDestroySpeed(tool, true);
-            toolEfficiency = tool.removeEnchantment(Enchantment.DIG_SPEED);
-        }
+        final int toolPower = getToolPower(block, tool);
+        final int toolEfficiency = tool.getAmount() > 0 ? tool.removeEnchantment(Enchantment.DIG_SPEED) : 0;
 
-        // start digging task
-        DigProgress digProgress = new DigProgress(plugin, block, position, tool,
-                toolPower, toolEfficiency, blockDurability);
-        digProgress.setTask(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin,
-            () -> playerDigTask(digProgress, tool, player), 20, 20));
-        diggers.put(player.getEntityId(), digProgress);
+        // get block durability
+        blockDurabilityService.getDurabilityAbsolute(block).thenApply((blockDurability) -> {
+            // start digging task
+            DigProgress digProgress = new DigProgress(plugin, block, position, tool,
+                    toolPower, toolEfficiency, blockDurability);
+            applyFatigue(player);
+            digProgress.setTask(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin,
+                () -> playerDigTask(digProgress, tool, player), 20, 20));
+            diggers.put(player.getEntityId(), digProgress);
+            return null;
+        });
+    }
+
+    /**
+     * Get the tool's power on a block.
+     * @param block The block.
+     * @param tool The tool.
+     * @return The tool's power on a block.
+     */
+    private int getToolPower(Block block, ItemStack tool) {
+        if (tool.getAmount() > 0) {
+            if (PaperLib.isPaper()) {
+                // use actual block destroy speed
+                Method method;
+                try {
+                    method = Block.class.getMethod("getDestroySpeed", ItemStack.class, boolean.class);
+                    float pow = (Float) method.invoke(block, tool, true);
+                    return (int) pow;
+                } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        return 1;
     }
 
     /**
@@ -131,12 +196,11 @@ public class DiggersHandler implements PacketListener, Listener {
         // do swing
         int swingsSinceSave = digProgress.onSwing();
         if (swingsSinceSave > 5) {
+            // apply fatigue
+            applyFatigue(player);
+
             // save current dig progress
-            try {
-                digProgress.save();
-            } catch (ChunkBusyException | ChunkNotLoadedException e) {
-                e.printStackTrace();
-            }
+            digProgress.save();
         }
 
         if (digProgress.getCurrentDurability() <= 0) {
@@ -147,7 +211,7 @@ public class DiggersHandler implements PacketListener, Listener {
             digProgress.getBlock().breakNaturally(tool);
         } else {
             // update progress
-            setDigProgress(player,
+            setDigAnimation(player,
                     digProgress.getPosition(),
                     digProgress.getAnimationProgress());
             communicationService.showDurability(
@@ -168,11 +232,7 @@ public class DiggersHandler implements PacketListener, Listener {
             Bukkit.getScheduler().cancelTask(digProgress.getTask());
 
             // save block durability and damage tool
-            try {
-                digProgress.save();
-            } catch (ChunkBusyException | ChunkNotLoadedException e) {
-                e.printStackTrace();
-            }
+            digProgress.save();
 
             // restore player's enchantments
             if (digProgress.getTool().getAmount() > 0
@@ -188,14 +248,8 @@ public class DiggersHandler implements PacketListener, Listener {
                     plugin, () -> clearFatigue(player));
 
             // clear animation
-            setDigProgress(player, digProgress.getPosition(), -1);
+            setDigAnimation(player, digProgress.getPosition(), -1);
         }
-    }
-
-    @EventHandler
-    public void onPlayerDisconnect(PlayerQuitEvent event) {
-        // cancel dig task for leaving player
-        onStopDigging(event.getPlayer());
     }
 
     @Override
@@ -240,7 +294,7 @@ public class DiggersHandler implements PacketListener, Listener {
      * @param player
      * @param progress
      */
-    private void setDigProgress(Player player, BlockPosition blockPosition, int progress) {
+    private void setDigAnimation(Player player, BlockPosition blockPosition, int progress) {
         PacketContainer packetContainer = new PacketContainer(PacketType.Play.Server.BLOCK_BREAK_ANIMATION);
         // set entity id
         packetContainer.getIntegers().write(0, player.getEntityId() + 1);
@@ -251,8 +305,8 @@ public class DiggersHandler implements PacketListener, Listener {
 
         // send progress
         Bukkit.getScheduler().runTask(plugin,
-                () -> blockPosition.toLocation(player.getWorld())
-                        .getNearbyPlayers(20).forEach((p) -> {
+                () -> LocationUtil.getPlayersAroundPoint(
+                        blockPosition.toLocation(player.getWorld()), 1).forEach((p) -> {
             // send
             try {
                 protocolManager.sendServerPacket(p, packetContainer);
@@ -349,7 +403,8 @@ public class DiggersHandler implements PacketListener, Listener {
             return ++swingsSinceSave;
         }
 
-        public void save() throws ChunkBusyException, ChunkNotLoadedException {
+        @SneakyThrows
+        public void save() {
             // damage tool
             if (toolDamageModifier > 0 && toolMeta != null) {
                 Damageable damageable = (Damageable) toolMeta;
@@ -359,7 +414,7 @@ public class DiggersHandler implements PacketListener, Listener {
             }
 
             // damage blocks
-            lastDurability = plugin.getBlockDurabilityService().getDurabilityAbsolute(block);
+            lastDurability = plugin.getBlockDurabilityService().getDurabilityAbsolute(block).get();
             lastDurability -= swingsSinceSave * toolPower;
             plugin.getBlockDurabilityService().setDurabilityAbsolute(block, lastDurability);
             swingsSinceSave = 0;

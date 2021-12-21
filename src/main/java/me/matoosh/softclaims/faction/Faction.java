@@ -1,14 +1,7 @@
 package me.matoosh.softclaims.faction;
 
-import lombok.Data;
-
 /**
  * Represents a faction.
  */
-@Data
-public class Faction {
-    private final String id;
-    private final String name;
-    private final double power;
-    private final boolean system;
+public record Faction(String id, String name, double power) {
 }

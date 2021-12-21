@@ -1,6 +1,8 @@
 package me.matoosh.softclaims.faction;
 
+import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import org.bukkit.Chunk;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 
 import java.util.Collections;
@@ -30,8 +32,8 @@ public class NoFactionImplementation implements IFactionImplementation {
      * @return The faction if found.
      */
     @Override
-    public Faction getFaction(String factionId) {
-        return null;
+    public Faction getFaction(String factionId) throws FactionDoesntExistException {
+        throw new FactionDoesntExistException();
     }
 
     /**
@@ -41,8 +43,8 @@ public class NoFactionImplementation implements IFactionImplementation {
      * @return The faction if found.
      */
     @Override
-    public Faction getFaction(Chunk factionChunk) {
-        return null;
+    public Faction getFaction(Chunk factionChunk) throws FactionDoesntExistException {
+        throw new FactionDoesntExistException();
     }
 
     /**
@@ -52,8 +54,8 @@ public class NoFactionImplementation implements IFactionImplementation {
      * @return The faction if found.
      */
     @Override
-    public Faction getFaction(Player factionMember) {
-        return null;
+    public Faction getFaction(Player factionMember) throws FactionDoesntExistException {
+        throw new FactionDoesntExistException();
     }
 
     /**
@@ -87,7 +89,7 @@ public class NoFactionImplementation implements IFactionImplementation {
      * @param chunk     The chunk.
      */
     @Override
-    public void claimChunk(String factionId, Chunk chunk) {
+    public void claimChunk(String factionId, World world, int chunkX, int chunkZ) {
     }
 
     /**
@@ -97,6 +99,6 @@ public class NoFactionImplementation implements IFactionImplementation {
      * @param chunk     The chunk.
      */
     @Override
-    public void unclaimChunk(String factionId, Chunk chunk) {
+    public void unclaimChunk(String factionId, World world, int chunkX, int chunkZ) {
     }
 }

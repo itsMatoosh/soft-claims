@@ -8,7 +8,7 @@ import org.bukkit.command.CommandSender;
  */
 public class MSG {
     public static String PLUGIN_CHAT_PREFIX = ChatColor.translateAlternateColorCodes(
-            '&', "&0&l[&f&lSoft &b&lClaims&0&l] &f");
+            '&', "&0[&fSoft &bClaims&0] &f");
 
     public static void send(CommandSender sender, String message) {
         sender.sendMessage(constructMessage(message));

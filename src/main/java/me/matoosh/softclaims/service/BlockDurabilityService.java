@@ -2,51 +2,33 @@ package me.matoosh.softclaims.service;
 
 import lombok.Data;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import me.matoosh.blockmetadata.BlockMetadataStorage;
-import me.matoosh.blockmetadata.exception.ChunkBusyException;
-import me.matoosh.blockmetadata.exception.ChunkNotLoadedException;
+import me.matoosh.blockmetadata.ChunkInfo;
 import me.matoosh.softclaims.SoftClaimsPlugin;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 
-import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Getter
+@RequiredArgsConstructor
 public class BlockDurabilityService {
 
     private final WorldService worldService;
     private final FactionService factionService;
     private final SoftClaimsPlugin plugin;
-
-    /**
-     * Reference to the durabilities storage service.
-     */
     private final BlockMetadataStorage<Double> durabilityStorage;
-
-    public BlockDurabilityService(WorldService worldService, FactionService factionService,
-                                  SoftClaimsPlugin plugin) {
-        this.worldService = worldService;
-        this.factionService = factionService;
-        this.plugin = plugin;
-
-        // get data folder
-        Path durabilitiesDataDir = plugin.getDataFolder().toPath()
-                .resolve("data").resolve("durabilities");
-
-        // create durabilities storage
-        this.durabilityStorage = new BlockMetadataStorage<>(plugin, durabilitiesDataDir);
-    }
 
     /**
      * Set durability of a block.
      * @param block The block.
      * @param durability The new durability.
      */
-    public void setDurabilityAbsolute(Block block, int durability)
-            throws ChunkBusyException, ChunkNotLoadedException {
+    public void setDurabilityAbsolute(Block block, int durability) {
         setDurabilityRelative(block, getDurabilityRelative(block, durability));
     }
 
@@ -55,8 +37,7 @@ public class BlockDurabilityService {
      * @param block The block.
      * @param durability Durability between 0 and 1.
      */
-    public void setDurabilityRelative(Block block, double durability)
-            throws ChunkBusyException, ChunkNotLoadedException {
+    public void setDurabilityRelative(Block block, double durability) {
         // check if value is correct
         if (!Double.isFinite(durability)) return;
 
@@ -75,48 +56,47 @@ public class BlockDurabilityService {
      * @param delta The change in durabilities.
      * @return List of modified durability keys.
      */
-    public List<String> modifyDurabilitiesInChunk(Chunk chunk, int delta)
-            throws ChunkBusyException, ChunkNotLoadedException {
+    public CompletableFuture<List<String>> modifyDurabilitiesInChunk(Chunk chunk, int delta) {
         // check if delta is correct
-        if (!Double.isFinite(delta)) return Collections.emptyList();
+        if (!Double.isFinite(delta)) return CompletableFuture.completedFuture(Collections.emptyList());
 
-        // check if there are any durabilities in chunk
-        if (!durabilityStorage.hasMetadataForChunk(chunk)) {
-            return Collections.emptyList();
-        }
-
-        // get chunk inner map
-        Map<String, Double> durabilities = durabilityStorage.modifyMetadataInChunk(chunk);
-
-        // modify all durabilities
-        List<String> modified = new ArrayList<>(durabilities.entrySet().size());
-        Iterator<Map.Entry<String, Double>> iter = durabilities.entrySet().iterator();
-        while (iter.hasNext()) {
-            // get current durability
-            Map.Entry<String, Double> entry = iter.next();
-            String[] posUnparsed = entry.getKey().split(",");
-            Block block = chunk.getBlock(
-                    Integer.parseInt(posUnparsed[0]),
-                    Integer.parseInt(posUnparsed[1]),
-                    Integer.parseInt(posUnparsed[2])
-            );
-            int durability = getAbsoluteDurability(block, entry.getValue());
-
-            // get new durability
-            double newDurability = getDurabilityRelative(block, durability + delta);
-
-            // clear if outside of range
-            if (newDurability <= 0 || newDurability >= 1) {
-                iter.remove();
-                continue;
+        return durabilityStorage.getMetadataInChunk(ChunkInfo.fromChunk(chunk))
+        .thenApply((durabilities) -> {
+            // check if there are any durabilities in chunk
+            if (durabilities == null) {
+                return Collections.emptyList();
             }
 
-            // update durability
-            entry.setValue(newDurability);
-            modified.add(entry.getKey());
-        }
+            // modify all durabilities
+            List<String> modified = new ArrayList<>(durabilities.entrySet().size());
+            Iterator<Map.Entry<String, Double>> iter = durabilities.entrySet().iterator();
+            while (iter.hasNext()) {
+                // get current durability
+                Map.Entry<String, Double> entry = iter.next();
+                String[] posUnparsed = entry.getKey().split(",");
+                Block block = chunk.getBlock(
+                        Integer.parseInt(posUnparsed[0]),
+                        Integer.parseInt(posUnparsed[1]),
+                        Integer.parseInt(posUnparsed[2])
+                );
+                int durability = getAbsoluteDurability(block, entry.getValue());
 
-        return modified;
+                // get new durability
+                double newDurability = getDurabilityRelative(block, durability + delta);
+
+                // clear if outside of range
+                if (newDurability <= 0 || newDurability >= 1) {
+                    iter.remove();
+                    continue;
+                }
+
+                // update durability
+                entry.setValue(newDurability);
+                modified.add(entry.getKey());
+            }
+
+            return modified;
+        });
     }
 
     /**
@@ -124,14 +104,14 @@ public class BlockDurabilityService {
      * @param block The block.
      * @return Current durability of the block.
      */
-    public int getDurabilityAbsolute(Block block)
-            throws ChunkBusyException, ChunkNotLoadedException {
-        double durability = getDurabilityRelative(block);
-        if (durability == 0) {
-            return 0;
-        } else {
-            return getAbsoluteDurability(block, durability);
-        }
+    public CompletableFuture<Integer> getDurabilityAbsolute(Block block) {
+        return getDurabilityRelative(block).thenApply((durability) -> {
+            if (durability == 0) {
+                return 0;
+            } else {
+                return getAbsoluteDurability(block, durability);
+            }
+        });
     }
 
     /**
@@ -139,23 +119,23 @@ public class BlockDurabilityService {
      * @param block The block.
      * @return Current durability of the block.
      */
-    public double getDurabilityRelative(Block block)
-            throws ChunkBusyException, ChunkNotLoadedException {
-        if (block == null) return 0d;
+    public CompletableFuture<Double> getDurabilityRelative(Block block) {
+        if (block == null) return CompletableFuture.completedFuture(0d);
 
         // check if block has durability
         if (!hasDurability(block)) {
-            return 0d;
+            return CompletableFuture.completedFuture(0d);
         }
 
         // get block durability
-        Double durability = durabilityStorage.getMetadata(block);
-        if (durability == null) {
-            // no data stored for the block
-            // default to total durability
-            return 1d;
-        }
-        return durability;
+        return durabilityStorage.getMetadata(block).thenApply((durability) -> {
+            if (durability == null) {
+                // no data stored for the block
+                // default to total durability
+                return 1d;
+            }
+            return durability;
+        });
     }
 
     /**
@@ -165,32 +145,39 @@ public class BlockDurabilityService {
      */
     public boolean hasDurability(Block block) {
         // check if this world is disabled
-        if (plugin.getWorldService().isWorldDisabled(block.getWorld())) {
+        if (worldService.isWorldDisabled(block.getWorld())) {
             return false;
         }
         // check if block has durability set
-        if (!plugin.getConfig().contains("blocks." + block.getType().name() + ".durability")) {
+        if (!isMaterialDurable(block.getType())) {
             return false;
         }
         // check if block is in a faction chunk
-        return plugin.getFactionService().isInFactionLand(block.getChunk());
+        return factionService.isInFactionLand(block.getChunk());
+    }
+
+    /**
+     * Checks whether a material has durability set.
+     * @param material The material.
+     * @return
+     */
+    public boolean isMaterialDurable(Material material) {
+        return plugin.getConfig().contains("blocks." + material.name() + ".durability");
     }
 
     /**
      * Clears all durability data in a chunk.
      * @param chunk The chunk.
      */
-    public void clearDurabilitiesInChunk(Chunk chunk)
-            throws ChunkBusyException, ChunkNotLoadedException {
-        durabilityStorage.removeMetadataForChunk(chunk);
+    public void clearDurabilitiesInChunk(Chunk chunk) {
+        durabilityStorage.removeMetadataForChunk(ChunkInfo.fromChunk(chunk));
     }
 
     /**
      * Clears durability of a block.
      * @param block The block.
      */
-    public void clearDurability(Block block)
-            throws ChunkBusyException, ChunkNotLoadedException {
+    public void clearDurability(Block block) {
         durabilityStorage.removeMetadata(block);
     }
 
@@ -198,25 +185,25 @@ public class BlockDurabilityService {
      * Gets a list of damaged blocks within a chunk.
      * @param chunk The chunk.
      * @return A list of damaged blocks within the chunk.
-     * @throws ChunkBusyException Thrown if the chunks is busy.
      */
-    public List<DamagedBlock> getDamagedBlocksInChunk(Chunk chunk)
-            throws ChunkBusyException, ChunkNotLoadedException {
-        // check if there are durabilities in chunk
-        if (durabilityStorage.hasMetadataForChunk(chunk)) {
-            return Collections.emptyList();
-        }
+    public CompletableFuture<List<DamagedBlock>> getDamagedBlocksInChunk(Chunk chunk) {
         // get damaged blocks in chunk
-        return durabilityStorage.getMetadataInChunk(chunk)
-            .entrySet().parallelStream().map((entry) -> {
-                String[] position = entry.getKey().split(",");
-                return new DamagedBlock(
-                        chunk.getBlock(Integer.parseInt(position[0]),
-                                Integer.parseInt(position[1]),
-                                Integer.parseInt(position[2])),
-                        entry.getValue()
-                );
-        }).collect(Collectors.toList());
+        return durabilityStorage.getMetadataInChunk(ChunkInfo.fromChunk(chunk))
+        .thenApply((metadata) -> {
+            if (metadata == null) {
+                return Collections.emptyList();
+            } else {
+                return metadata.entrySet().stream().map((entry) -> {
+                    String[] position = entry.getKey().split(",");
+                    return new DamagedBlock(
+                            chunk.getBlock(Integer.parseInt(position[0]),
+                                    Integer.parseInt(position[1]),
+                                    Integer.parseInt(position[2])),
+                            entry.getValue()
+                    );
+                }).collect(Collectors.toList());
+            }
+        });
     }
     /**
      * Gets relative durability of a block

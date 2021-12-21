@@ -1,61 +1,76 @@
 plugins {
-    id 'com.github.johnrengelman.shadow' version '5.2.0'
+    id 'com.github.johnrengelman.shadow' version '7.0.0'
     id 'java'
-    id 'maven'
+    id "io.freefair.lombok" version "6.0.0-m2"
 }
 
 group 'me.matoosh'
 version '1.8.0'
 
-sourceCompatibility = targetCompatibility = JavaVersion.VERSION_1_8
+sourceCompatibility = JavaVersion.VERSION_16
 
 repositories {
     maven { url 'https://papermc.io/repo/repository/maven-public/' }
     maven { url = "https://repo.aikar.co/content/groups/aikar/" }
     maven { url = "https://hub.spigotmc.org/nexus/content/groups/public/" }
-    maven { url "https://nexus.savagelabs.net/repository/maven-releases/" }
     maven { url 'https://jitpack.io' }
+    flatDir {
+        dirs 'lib'
+    }
     mavenCentral()
-    jcenter()
 }
 
 dependencies {
-    // factionsx
-    compileOnly 'net.prosavage.factionsx:FactionsX:1.0.8-RC'
+    // spigot api
+    compileOnly 'org.spigotmc:spigot-api:1.17.1-R0.1-SNAPSHOT'
+    testCompileOnly 'org.spigotmc:spigot-api:1.17.1-R0.1-SNAPSHOT'
+
+    // paper lib
+    implementation "io.papermc:paperlib:1.0.6"
+    testImplementation "io.papermc:paperlib:1.0.6"
+
+    // mock bukkit
+    implementation 'com.github.seeseemelk:MockBukkit:v1.16-SNAPSHOT'
+
+    // adventure
+    implementation 'net.kyori:adventure-platform-bukkit:4.0.0'
+
+    // saber factions
+    compileOnly name: 'SaberFactions'
 
     // protocollib
     compileOnly group: "com.comphenix.protocol", name: "ProtocolLib", version: "4.6.0";
     testImplementation group: "com.comphenix.protocol", name: "ProtocolLib", version: "4.6.0";
 
     // command lib
-    compile "co.aikar:acf-paper:0.5.0-SNAPSHOT"
+    implementation "co.aikar:acf-paper:0.5.0-SNAPSHOT"
 
     // plugin.yml annotations
     compileOnly 'org.spigotmc:plugin-annotations:1.2.3-SNAPSHOT'
     annotationProcessor 'org.spigotmc:plugin-annotations:1.2.3-SNAPSHOT'
-
-    // paper api
-    compileOnly 'com.destroystokyo.paper:paper-api:1.16.5-R0.1-SNAPSHOT'
 
     // jackson
     implementation group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-yaml', version: '2.12.3'
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.12.3'
 
     // block durability
-    implementation 'com.github.itsMatoosh:block-metadata:1.2.0'
+    implementation 'com.github.itsMatoosh:block-metadata:1.5.0'
 
-    // lombok
-    compileOnly 'org.projectlombok:lombok:1.18.20'
-    annotationProcessor 'org.projectlombok:lombok:1.18.20'
-    testCompileOnly 'org.projectlombok:lombok:1.18.20'
-    testAnnotationProcessor 'org.projectlombok:lombok:1.18.20'
+    // junit
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
 
-    testCompile group: 'junit', name: 'junit', version: '4.12'
+    // mockito
+    testImplementation 'org.mockito:mockito-core:4.1.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:4.1.0'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 shadowJar {
-    relocate 'co.aikar.commands', 'me.matoosh.sleepers.acf'
-    relocate 'co.aikar.locales', 'me.matoosh.sleepers.locales'
+    relocate 'co.aikar.commands', 'me.matoosh.softclaims.acf'
+    relocate 'co.aikar.locales', 'me.matoosh.softclaims.locales'
 }
 
 build.dependsOn shadowJar
