@@ -1,13 +1,13 @@
 package me.matoosh.softclaims.faction.saberfactions;
 
+import com.massivecraft.factions.Board;
 import com.massivecraft.factions.FPlayer;
 import com.massivecraft.factions.event.LandClaimEvent;
+import com.massivecraft.factions.event.LandUnclaimAllEvent;
 import com.massivecraft.factions.event.LandUnclaimEvent;
 import lombok.RequiredArgsConstructor;
 import me.matoosh.softclaims.MSG;
 import me.matoosh.softclaims.SoftClaimsPlugin;
-import me.matoosh.softclaims.service.BlockDurabilityService;
-import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 
@@ -29,6 +29,29 @@ public class SaberFactionsEventHandler implements Listener {
     }
 
     @EventHandler
+    public void onChunkUnclaimAll(LandUnclaimAllEvent event) {
+        // only allow chunks to be unclaimed by admins/by breaking a faction core
+        FPlayer fPlayer = event.getfPlayer();
+
+        // check admin bypass
+        if (fPlayer != null && !fPlayer.isAdminBypassing()) {
+            MSG.send(fPlayer.getPlayer(), "&cYou can only unclaim chunks by breaking the nearby &lFaction Core");
+            event.setCancelled(true);
+            return;
+        }
+
+        // clear and destroy unhealthy blocks in all chunks
+        Board.getInstance().getAllClaims(event.getFaction())
+        .forEach((c) -> {
+            // get core in the chunk
+            plugin.getFactionCoreService().clearAndDestroyCoresInChunk(c.getChunk());
+
+            // clean durabilities for this chunk
+            plugin.getBlockDurabilityService().clearAndBreakUnhealthyBlocksInChunk(c.getChunk());
+        });
+    }
+
+    @EventHandler
     public void onChunkUnclaim(LandUnclaimEvent event) {
         // only allow chunks to be unclaimed by admins/by breaking a faction core
         FPlayer fPlayer = event.getfPlayer();
@@ -40,19 +63,10 @@ public class SaberFactionsEventHandler implements Listener {
             return;
         }
 
-        // clear durable blocks in the chunk
-        plugin.getBlockDurabilityService().getDamagedBlocksInChunk(event.getLocation().getChunk()).thenApply((damagedBlocks -> {
-            damagedBlocks.forEach((block) -> {
-                // break down blocks that are not "healthy"
-                if (!BlockDurabilityService.isBlockHealthy(block.getDurability())) {
-                    Bukkit.getScheduler().runTask(plugin, () -> block.getBlock().breakNaturally());
-                }
-            });
-            return null;
-        }));
+        // clear cores in this chunk
+        plugin.getFactionCoreService().clearAndDestroyCoresInChunk(event.getLocation().getChunk());
 
-        // clear durabilities for this chunk
-        plugin.getBlockDurabilityService().clearDurabilitiesInChunk(
-                event.getLocation().getChunk());
+        // clear durable blocks in the chunk
+        plugin.getBlockDurabilityService().clearAndBreakUnhealthyBlocksInChunk(event.getLocation().getChunk());
     }
 }

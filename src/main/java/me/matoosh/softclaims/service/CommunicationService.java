@@ -43,20 +43,6 @@ public class CommunicationService {
         progressBar.append("  ".repeat(Math.max(0, 10 - fullBars - offset)));
 
         // action bar
-//        TextComponent durabilityComponent = new TextComponent("Durability: " + durability);
-//        durabilityComponent.setColor(ChatColor.of("#f44e07"));
-//        TextComponent separatorComponent = new TextComponent(" | " + durability);
-//        separatorComponent.setColor(ChatColor.of("#bababa"));
-//        TextComponent progressBarOpenerComponent = new TextComponent("[");
-//        progressBarOpenerComponent.setColor(ChatColor.of("#777777"));
-//        TextComponent progressBarCloserComponent = new TextComponent("]");
-//        progressBarCloserComponent.setColor(ChatColor.of("#777777"));
-//        TextComponent progressBarComponent = new TextComponent(progressBar.toString());
-//        progressBarComponent.setColor(ChatColor.of("#f44e07"));
-//
-//        player.spigot().sendMessage(ChatMessageType.ACTION_BAR, durabilityComponent, separatorComponent,
-//                progressBarOpenerComponent, progressBarComponent, progressBarCloserComponent);
-
         plugin.getAdventure().player(player)
                 .sendActionBar(Component.join(
                 Component.text(" | ", TextColor.fromHexString("#bababa")),

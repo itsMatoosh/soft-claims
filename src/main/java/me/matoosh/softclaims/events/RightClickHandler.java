@@ -28,7 +28,6 @@ public class RightClickHandler implements Listener {
 
     /**
      * Called when a player interacts with a block.
-     * @param event
      */
     @EventHandler
     public void onPlayerRightClickBlock(PlayerInteractEvent event) {
@@ -45,24 +44,24 @@ public class RightClickHandler implements Listener {
         Block block = event.getClickedBlock();
         if (block.getType() == Material.RESPAWN_ANCHOR) {
             // show faction core info
-            factionCoreService.getFactionCoreStorage().getMetadata(block).thenApply((faction) -> {
+            factionCoreService.getFactionCoreStorage().getMetadata(block)
+            .thenAccept((faction) -> {
                 if (faction != null) {
-                    System.out.println("CORE: " + faction);
+                    // TODO: show core info to player
                 }
-                return null;
             });
         } else {
             // show block durability
-            blockDurabilityService.getDurabilityAbsolute(event.getClickedBlock()).thenApply((durability) -> {
+            blockDurabilityService.getDurabilityAbsolute(event.getClickedBlock())
+            .thenAccept((durability) -> {
                 if (durability == 0) {
-                    return null;
+                    return;
                 }
 
                 // show durability info to player
                 communicationService.showDurability(event.getPlayer(), durability,
                         blockDurabilityService.getTotalDurability(
                                 event.getClickedBlock().getType()));
-                return null;
             });
         }
 

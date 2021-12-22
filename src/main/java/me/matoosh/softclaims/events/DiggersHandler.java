@@ -151,7 +151,8 @@ public class DiggersHandler implements PacketListener, Listener {
         final int toolEfficiency = tool.getAmount() > 0 ? tool.removeEnchantment(Enchantment.DIG_SPEED) : 0;
 
         // get block durability
-        blockDurabilityService.getDurabilityAbsolute(block).thenApply((blockDurability) -> {
+        blockDurabilityService.getDurabilityAbsolute(block)
+        .thenAccept((blockDurability) -> {
             // start digging task
             DigProgress digProgress = new DigProgress(plugin, block, position, tool,
                     toolPower, toolEfficiency, blockDurability);
@@ -159,7 +160,6 @@ public class DiggersHandler implements PacketListener, Listener {
             digProgress.setTask(Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin,
                 () -> playerDigTask(digProgress, tool, player), 20, 20));
             diggers.put(player.getEntityId(), digProgress);
-            return null;
         });
     }
 

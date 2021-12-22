@@ -128,8 +128,10 @@ public class FactionService {
 
     /**
      * Claims a chunk for a faction.
-     * @param chunk The chunk.
      * @param factionId The name of the faction.
+     * @param world The world in which the chunk is.
+     * @param chunkX The chunk x coordinate.
+     * @param chunkZ The chunk z coordinate.
      */
     public void claimChunk(String factionId, World world, int chunkX, int chunkZ)
             throws FactionDoesntExistException {
@@ -138,8 +140,10 @@ public class FactionService {
 
     /**
      * Unclaims a chunk for a faction.
-     * @param chunk The chunk.
      * @param factionId The name of the faction.
+     * @param world The world in which the chunk is.
+     * @param chunkX The chunk x coordinate.
+     * @param chunkZ The chunk z coordinate.
      */
     public void unclaimChunk(String factionId, World world, int chunkX, int chunkZ)
             throws FactionDoesntExistException {

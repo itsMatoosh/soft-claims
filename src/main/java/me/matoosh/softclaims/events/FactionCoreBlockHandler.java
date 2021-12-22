@@ -91,7 +91,7 @@ public class FactionCoreBlockHandler implements Listener {
 
         try {
             // attempt to remove a faction core
-            factionCoreService.removeCore(broken, event.getPlayer())
+            factionCoreService.removeCoreAsPlayer(broken, event.getPlayer())
             .exceptionally((e) -> {
                 e.printStackTrace();
                 return null;

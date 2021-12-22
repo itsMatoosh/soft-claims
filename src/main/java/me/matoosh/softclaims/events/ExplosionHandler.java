@@ -111,7 +111,8 @@ public class ExplosionHandler implements Listener {
             CompletableFuture<Void>[] futures = new CompletableFuture[durableBlocks.size()];
             for (int i = 0; i < durableBlocks.size(); i++) {
                 Block b = durableBlocks.get(i);
-                futures[i] = blockDurabilityService.getDurabilityAbsolute(b).thenApply((durability) -> {
+                futures[i] = blockDurabilityService.getDurabilityAbsolute(b)
+                .thenAccept((durability) -> {
                     // calculate damage to block based on distance
                     // to the center of the explosion
                     double dist = location.distance(b.getLocation().add(0.5, 0.5, 0.5)) - 1;
@@ -127,7 +128,6 @@ public class ExplosionHandler implements Listener {
                         blockDurabilityService.clearDurability(b);
                         destroyedBlocks.add(b);
                     }
-                    return null;
                 });
             }
             // break blocks

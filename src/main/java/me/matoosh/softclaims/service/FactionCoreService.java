@@ -7,6 +7,7 @@ import lombok.extern.java.Log;
 import me.matoosh.blockmetadata.BlockMetadataStorage;
 import me.matoosh.blockmetadata.ChunkCoordinates;
 import me.matoosh.blockmetadata.ChunkInfo;
+import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.WorldDisabledException;
 import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import me.matoosh.softclaims.exception.faction.FactionPermissionsDeniedException;
@@ -16,11 +17,13 @@ import me.matoosh.softclaims.exception.faction.core.InvalidCoreBlockException;
 import me.matoosh.softclaims.exception.faction.core.MultipleCoresInChunkException;
 import me.matoosh.softclaims.faction.Faction;
 import me.matoosh.softclaims.faction.FactionPermission;
-import org.bukkit.Chunk;
-import org.bukkit.Material;
-import org.bukkit.World;
+import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.entity.EnderCrystal;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.metadata.FixedMetadataValue;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -31,6 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Log
 public class FactionCoreService {
 
+    private static final String ENDER_CRYSTAL_METADATA_KEY = "softclaims-faction";
+
+    private final SoftClaimsPlugin plugin;
     /**
      * Reference to the faction service.
      */
@@ -91,7 +97,7 @@ public class FactionCoreService {
             }
             return null;
         })
-        // get unclaimed chunks that should be claimed
+        // claim chunks around the core
         .thenCompose((s) -> getUnclaimedChunksAround(chunk)
             .thenApply((unclaimedChunks) -> {
                 // get faction claims
@@ -103,7 +109,6 @@ public class FactionCoreService {
                 }
 
                 // ensure that the faction has enough power to claim more chunks
-                System.out.println("COCK");
                 if (claims.size() + unclaimedChunks.size() > claimingFaction.power()) {
                     throw new CompletionException(new NotEnoughPowerException());
                 }
@@ -119,22 +124,36 @@ public class FactionCoreService {
             })
         )
         // add core
-        .thenCompose((c) -> factionCoreStorage.setMetadata(block, claimingFaction.id()));
+        .thenCompose((c) -> factionCoreStorage.setMetadata(block, claimingFaction.id()))
+        // spawn crystal and do effects
+        .thenAccept((c) -> {
+            // get location
+            Location location = block.getLocation();
+            World world = location.getWorld();
+
+            // spawn crystal
+            EnderCrystal crystal = (EnderCrystal) world.spawnEntity(
+                    location.add(0, 1, 0), EntityType.ENDER_CRYSTAL);
+            crystal.setInvulnerable(true);
+            crystal.setPersistent(true);
+            crystal.setCustomName(claimingFaction.name() + "'s Core");
+            crystal.setCustomNameVisible(true);
+            crystal.setMetadata(ENDER_CRYSTAL_METADATA_KEY,
+                    new FixedMetadataValue(plugin, claimingFaction.id()));
+
+            // spawn particles
+            world.spawnParticle(Particle.DRAGON_BREATH, location, 1);
+        });
     }
 
     /**
-     * Removes a faction core.
-     * @param block The removed block.
+     * Removes a faction core as a player.
+     * @param block The core block.
      * @param remover The removing player.
      */
-    public CompletableFuture<Void> removeCore(Block block, Player remover)
-            throws InvalidCoreBlockException, WorldDisabledException,
-            FactionPermissionsDeniedException, ExecutionException, InterruptedException {
-        // check if the world is blocked
-        if (worldService.isWorldDisabled(block.getWorld())) {
-            throw new WorldDisabledException();
-        }
-
+    public CompletableFuture<Void> removeCoreAsPlayer(Block block, Player remover)
+            throws InvalidCoreBlockException, FactionPermissionsDeniedException,
+            WorldDisabledException, ExecutionException, InterruptedException {
         // get player's faction
         Faction faction = null;
         try {
@@ -160,6 +179,23 @@ public class FactionCoreService {
             }
         }
 
+        // remove core
+        return removeCore(block);
+    }
+
+    /**
+     * Removes a faction core.
+     * @param block The core block.
+     */
+    public CompletableFuture<Void> removeCore(Block block)
+            throws InvalidCoreBlockException, ExecutionException, InterruptedException {
+        // get core's faction
+        String coreFaction = factionCoreStorage.getMetadata(block).get();
+        if (coreFaction == null) {
+            // not a core
+            throw new InvalidCoreBlockException();
+        }
+
         // get chunks influenced by the destroyed core
         log.info("Removing a core for " + coreFaction);
         int centerChunkX = block.getChunk().getX();
@@ -174,7 +210,8 @@ public class FactionCoreService {
                 // get factions influencing each chunk
                 int finalI = i;
                 int finalJ = j;
-                futures[f] = getChunkInfluences(world, centerChunkX + i, centerChunkZ + j).thenApply(influences -> {
+                futures[f] = getChunkInfluences(world, centerChunkX + i, centerChunkZ + j)
+                .thenAccept(influences -> {
                     // if there are no influences, unclaim chunk
                     if (influences.containsKey(coreFaction)) {
                         int count = influences.get(coreFaction).decrementAndGet();
@@ -189,7 +226,7 @@ public class FactionCoreService {
                         } catch (FactionDoesntExistException e) {
                             throw new CompletionException(e);
                         }
-                        return null;
+                        return;
                     }
 
                     // find the new faction to influence this chunk
@@ -210,7 +247,7 @@ public class FactionCoreService {
                     // if the most influential faction is the current faction
                     // leave the chunk be
                     if (maxInfluence.getKey().equals(coreFaction)) {
-                        return null;
+                        return;
                     }
 
                     // make the most influential faction take the chunk
@@ -225,12 +262,23 @@ public class FactionCoreService {
                     } catch (FactionDoesntExistException e) {
                         throw new CompletionException(e);
                     }
-                    return null;
                 });
                 f++;
             }
         }
-        return CompletableFuture.allOf(futures);
+        // wait for all the claims and metadata to be removed
+        return CompletableFuture.allOf(futures)
+        // remove crystal and show effects
+        .thenAccept((c) -> {
+            // get location
+            Location location = block.getLocation();
+
+            // remove the crystal
+            world.getNearbyEntities(location, 1, 2, 1)
+                .stream().filter(entity -> entity instanceof EnderCrystal)
+                .filter(entity -> entity.hasMetadata(ENDER_CRYSTAL_METADATA_KEY))
+                .forEach(Entity::remove);
+        });
     }
 
     /**
@@ -331,5 +379,30 @@ public class FactionCoreService {
 
         // wait for all to complete
         return CompletableFuture.allOf(futures).thenApply((s) -> chunks);
+    }
+
+    /**
+     * Clears and destroys faction cores in a chunk.
+     * @param chunk
+     * @return
+     */
+    public CompletableFuture<Void> clearAndDestroyCoresInChunk(Chunk chunk) {
+        return factionCoreStorage.getMetadataInChunk(ChunkInfo.fromChunk(chunk))
+        .thenAccept(cores -> cores.keySet().forEach(key -> {
+            String[] position = key.split(",");
+
+            // break down blocks
+            Block block = chunk.getBlock(Integer.parseInt(position[0]),
+                    Integer.parseInt(position[1]),
+                    Integer.parseInt(position[2]));
+            Bukkit.getScheduler().runTask(plugin, (Runnable) block::breakNaturally);
+
+            // remove core
+            try {
+                removeCore(block);
+            } catch (InvalidCoreBlockException | ExecutionException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        }));
     }
 }

@@ -4,6 +4,7 @@ import be.seeseemelk.mockbukkit.MockBukkit;
 import be.seeseemelk.mockbukkit.ServerMock;
 import me.matoosh.blockmetadata.BlockMetadataStorage;
 import me.matoosh.blockmetadata.ChunkInfo;
+import me.matoosh.softclaims.SoftClaimsPlugin;
 import me.matoosh.softclaims.exception.WorldDisabledException;
 import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import me.matoosh.softclaims.exception.faction.FactionPermissionsDeniedException;
@@ -35,6 +36,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 public class FactionCoreServiceTest {
+    @Mock
+    private SoftClaimsPlugin plugin;
     /**
      * Reference to the faction service.
      */
@@ -71,7 +74,7 @@ public class FactionCoreServiceTest {
         ServerMock server = MockBukkit.mock();
         sampleWorld = server.addSimpleWorld("testWorld");
         sampleCoreBlock = sampleWorld.getBlockAt(1,1,1);
-        factionCoreService = new FactionCoreService(factionService, worldService, factionCoreStorage);
+        factionCoreService = new FactionCoreService(plugin, factionService, worldService, factionCoreStorage);
     }
 
     @AfterEach

@@ -11,6 +11,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class LocationUtil {
+    /**
+     * Finds players around a given location.
+     * @param location The location.
+     * @param chunkRadius Radius in chunk around which to find players.
+     * @return
+     */
     public static List<Player> getPlayersAroundPoint(Location location, int chunkRadius) {
         List<Player> players = new ArrayList<>();
         World world = location.getWorld();
@@ -24,7 +30,7 @@ public class LocationUtil {
                 if (world.isChunkLoaded(x, z)) {
                     // Add all players from this chunk to the list
                     players.addAll(
-                            Arrays.stream(world.getChunkAt(x, z).getEntities()).parallel()
+                            Arrays.stream(world.getChunkAt(x, z).getEntities())
                             .filter((entity -> entity instanceof Player))
                             .map(entity -> (Player) entity)
                             .collect(Collectors.toList())

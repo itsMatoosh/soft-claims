@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import me.matoosh.blockmetadata.BlockMetadataStorage;
 import me.matoosh.blockmetadata.ChunkInfo;
 import me.matoosh.softclaims.SoftClaimsPlugin;
+import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -169,8 +170,8 @@ public class BlockDurabilityService {
      * Clears all durability data in a chunk.
      * @param chunk The chunk.
      */
-    public void clearDurabilitiesInChunk(Chunk chunk) {
-        durabilityStorage.removeMetadataForChunk(ChunkInfo.fromChunk(chunk));
+    public CompletableFuture<Map<String, Double>> clearDurabilitiesInChunk(Chunk chunk) {
+        return durabilityStorage.removeMetadataForChunk(ChunkInfo.fromChunk(chunk));
     }
 
     /**
@@ -205,6 +206,31 @@ public class BlockDurabilityService {
             }
         });
     }
+
+    /**
+     * Clears durabilities in chunk.
+     * Breaks down unhealthy blocks naturally.
+     * @param chunk The chunk in which to clear durabilities.
+     */
+    public CompletableFuture<Void> clearAndBreakUnhealthyBlocksInChunk(Chunk chunk) {
+        return clearDurabilitiesInChunk(chunk).thenAccept(durabilities -> {
+            if (durabilities != null) {
+                durabilities.forEach((key, durability) -> {
+                    // get position and durability of the block
+                    String[] position = key.split(",");
+
+                    // break down blocks that are not "healthy"
+                    if (!BlockDurabilityService.isBlockHealthy(durability)) {
+                        Block block = chunk.getBlock(Integer.parseInt(position[0]),
+                                Integer.parseInt(position[1]),
+                                Integer.parseInt(position[2]));
+                        Bukkit.getScheduler().runTask(plugin, (Runnable) block::breakNaturally);
+                    }
+                });
+            }
+        });
+    }
+
     /**
      * Gets relative durability of a block
      * given its absolute durability.

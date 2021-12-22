@@ -28,6 +28,7 @@ import java.nio.file.Path;
 @Website("juulcraft.csrv.pl")
 @Dependency("ProtocolLib")
 @SoftDependency("Factions")
+@SoftDependency("HolographicDisplays")
 @Getter
 public class SoftClaimsPlugin extends JavaPlugin {
 
@@ -62,8 +63,8 @@ public class SoftClaimsPlugin extends JavaPlugin {
 
         // create faction core service
         Path coresDataDir = getDataFolder().toPath().resolve("data").resolve("cores");
-        factionCoreService = new FactionCoreService(
-                factionService, worldService, new BlockMetadataStorage<>(this, coresDataDir));
+        factionCoreService = new FactionCoreService(this, factionService, worldService,
+                new BlockMetadataStorage<>(this, coresDataDir));
 
         // init faction service
         this.factionService.initialize();
