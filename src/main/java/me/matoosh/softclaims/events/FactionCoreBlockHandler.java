@@ -15,11 +15,13 @@ import me.matoosh.softclaims.service.WorldService;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.entity.EntityType;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 
 import java.util.concurrent.ExecutionException;
 
@@ -48,7 +50,10 @@ public class FactionCoreBlockHandler implements Listener {
             .exceptionally((e) -> {
                 if (e.getCause() instanceof NotEnoughPowerException) {
                     // faction doesnt have enough power to claim more land
-                    MSG.send(event.getPlayer(), "&cYour faction doesn't have enough power to take over more land!");
+                    NotEnoughPowerException powerException = (NotEnoughPowerException) e.getCause();
+                    MSG.send(event.getPlayer(), "&cYour faction needs "
+                            + String.format("%.2f", powerException.getPowerDeficiency())
+                            + " more power to place this core!");
                     Bukkit.getScheduler().runTask(plugin, () -> event.getBlockPlaced().breakNaturally());
                 } else if (e.getCause() instanceof MultipleCoresInChunkException) {
                     // there is already a core in this chunk
@@ -106,5 +111,29 @@ public class FactionCoreBlockHandler implements Listener {
             // should not happen
             e.printStackTrace();
         }
+    }
+
+    @EventHandler
+    public void onExplodeFactionCore(EntityExplodeEvent event) {
+        // ignore other explosions
+        if (event.getEntityType() != EntityType.ENDER_CRYSTAL) {
+            return;
+        }
+
+        // check if the world is disabled
+        if (worldService.isWorldDisabled(event.getLocation().getWorld())) {
+            return;
+        }
+
+        // check if this crystal is registered
+        Block coreBlock = event.getEntity().getLocation()
+                .subtract(0.5, 1.5, 0.5)
+                .getBlock();
+        factionCoreService.getFactionCoreStorage().getMetadata(coreBlock)
+            .thenAccept(metadata -> {
+                if (metadata != null) {
+                    factionCoreService.clearAndDestroyCoresInChunk(event.getLocation().getChunk());
+                }
+            });
     }
 }

@@ -54,8 +54,8 @@ dependencies {
     implementation group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-yaml', version: '2.12.3'
     implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.12.3'
 
-    // block durability
-    implementation 'com.github.itsMatoosh:block-metadata:1.5.0'
+    // block metadata
+    implementation 'com.github.itsMatoosh:block-metadata:1.5.3'
 
     // junit
     testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'

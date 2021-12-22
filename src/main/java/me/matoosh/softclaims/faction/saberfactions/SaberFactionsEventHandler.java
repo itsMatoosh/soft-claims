@@ -30,16 +30,6 @@ public class SaberFactionsEventHandler implements Listener {
 
     @EventHandler
     public void onChunkUnclaimAll(LandUnclaimAllEvent event) {
-        // only allow chunks to be unclaimed by admins/by breaking a faction core
-        FPlayer fPlayer = event.getfPlayer();
-
-        // check admin bypass
-        if (fPlayer != null && !fPlayer.isAdminBypassing()) {
-            MSG.send(fPlayer.getPlayer(), "&cYou can only unclaim chunks by breaking the nearby &lFaction Core");
-            event.setCancelled(true);
-            return;
-        }
-
         // clear and destroy unhealthy blocks in all chunks
         Board.getInstance().getAllClaims(event.getFaction())
         .forEach((c) -> {

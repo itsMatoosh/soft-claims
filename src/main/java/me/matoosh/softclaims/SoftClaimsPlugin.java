@@ -28,7 +28,6 @@ import java.nio.file.Path;
 @Website("juulcraft.csrv.pl")
 @Dependency("ProtocolLib")
 @SoftDependency("Factions")
-@SoftDependency("HolographicDisplays")
 @Getter
 public class SoftClaimsPlugin extends JavaPlugin {
 

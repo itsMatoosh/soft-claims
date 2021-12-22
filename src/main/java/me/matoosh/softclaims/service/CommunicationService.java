@@ -45,13 +45,13 @@ public class CommunicationService {
         // action bar
         plugin.getAdventure().player(player)
                 .sendActionBar(Component.join(
-                Component.text(" | ", TextColor.fromHexString("#bababa")),
-                Component.text("Durability: " + durability, TextColor.fromHexString("#f44e07")),
-                Component.join(Component.empty(),
-                        Component.text("[", TextColor.fromHexString("#777777")),
-                        Component.text(progressBar.toString(), TextColor.fromHexString("#f44e07")),
-                        Component.text("]", TextColor.fromHexString("#777777"))
-                )
-        ));
+                        Component.text(" | ", TextColor.fromHexString("#bababa")),
+                        Component.text("Durability: " + durability, TextColor.fromHexString("#f44e07")),
+                        Component.join(Component.empty(),
+                                Component.text("[", TextColor.fromHexString("#777777")),
+                                Component.text(progressBar.toString(), TextColor.fromHexString("#f44e07")),
+                                Component.text("]", TextColor.fromHexString("#777777"))
+                        )
+                ));
     }
 }

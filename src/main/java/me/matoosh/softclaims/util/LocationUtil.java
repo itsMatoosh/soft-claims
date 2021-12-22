@@ -1,12 +1,9 @@
 package me.matoosh.softclaims.util;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -14,32 +11,15 @@ public class LocationUtil {
     /**
      * Finds players around a given location.
      * @param location The location.
-     * @param chunkRadius Radius in chunk around which to find players.
-     * @return
+     * @param distance Radius around which to find players.
+     * @return Players around a given location.
      */
-    public static List<Player> getPlayersAroundPoint(Location location, int chunkRadius) {
-        List<Player> players = new ArrayList<>();
-        World world = location.getWorld();
-        if (world == null) {
-            return Collections.emptyList();
-        }
-
-        // iterate through all chunks around center
-        for (int x = -chunkRadius; x <= chunkRadius; x++) {
-            for (int z = -chunkRadius; z <= chunkRadius; z++) {
-                if (world.isChunkLoaded(x, z)) {
-                    // Add all players from this chunk to the list
-                    players.addAll(
-                            Arrays.stream(world.getChunkAt(x, z).getEntities())
-                            .filter((entity -> entity instanceof Player))
-                            .map(entity -> (Player) entity)
-                            .collect(Collectors.toList())
-                    );
-                }
-            }
-        }
-
-        return players;
+    public static List<Player> getPlayersAroundPoint(Location location, int distance) {
+        int distSquared = distance * distance;
+        return Bukkit.getOnlinePlayers().parallelStream()
+                .filter(p -> p.getWorld() == location.getWorld())
+                .filter(p -> p.getLocation().distanceSquared(location) < distSquared)
+                .collect(Collectors.toList());
     }
 
 }

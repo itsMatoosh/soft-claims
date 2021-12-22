@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Log
 public class FactionCoreService {
 
-    private static final String ENDER_CRYSTAL_METADATA_KEY = "softclaims-faction";
+    public static final String ENDER_CRYSTAL_METADATA_KEY = "softclaims-faction";
 
     private final SoftClaimsPlugin plugin;
     /**
@@ -109,8 +109,9 @@ public class FactionCoreService {
                 }
 
                 // ensure that the faction has enough power to claim more chunks
-                if (claims.size() + unclaimedChunks.size() > claimingFaction.power()) {
-                    throw new CompletionException(new NotEnoughPowerException());
+                double powerDeficiency = claims.size() + unclaimedChunks.size() - claimingFaction.power();
+                if (powerDeficiency > 0) {
+                    throw new CompletionException(new NotEnoughPowerException(powerDeficiency));
                 }
 
                 // claim unclaimed
@@ -131,18 +132,21 @@ public class FactionCoreService {
             Location location = block.getLocation();
             World world = location.getWorld();
 
-            // spawn crystal
-            EnderCrystal crystal = (EnderCrystal) world.spawnEntity(
-                    location.add(0, 1, 0), EntityType.ENDER_CRYSTAL);
-            crystal.setInvulnerable(true);
-            crystal.setPersistent(true);
-            crystal.setCustomName(claimingFaction.name() + "'s Core");
-            crystal.setCustomNameVisible(true);
-            crystal.setMetadata(ENDER_CRYSTAL_METADATA_KEY,
-                    new FixedMetadataValue(plugin, claimingFaction.id()));
+            // run on main thread
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                // spawn crystal
+                EnderCrystal crystal = (EnderCrystal) world.spawnEntity(
+                        location.add(0.5, 1.5, 0.5), EntityType.ENDER_CRYSTAL);
+                crystal.setShowingBottom(false);
+                crystal.setPersistent(true);
+                crystal.setCustomName(claimingFaction.name() + "'s Core");
+                crystal.setCustomNameVisible(true);
+                crystal.setMetadata(ENDER_CRYSTAL_METADATA_KEY,
+                        new FixedMetadataValue(plugin, claimingFaction.id()));
 
-            // spawn particles
-            world.spawnParticle(Particle.DRAGON_BREATH, location, 1);
+                // TODO: spawn particles
+            });
+
         });
     }
 
@@ -208,12 +212,17 @@ public class FactionCoreService {
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
                 // get factions influencing each chunk
-                int finalI = i;
-                int finalJ = j;
-                futures[f] = getChunkInfluences(world, centerChunkX + i, centerChunkZ + j)
-                .thenAccept(influences -> {
+                ChunkInfo chunkInfo = new ChunkInfo(world.getName(),
+                        new ChunkCoordinates(centerChunkX + i, centerChunkZ + j));
+                CompletableFuture<Map<String, AtomicInteger>> influencesFuture = getChunkInfluences(chunkInfo);
+                CompletableFuture<ChunkCoordinates> coordinatesFuture
+                        = CompletableFuture.completedFuture(chunkInfo.getCoordinates());
+
+                // update faction claims
+                futures[f] = influencesFuture.thenAcceptBoth(coordinatesFuture, (influences, coordinates) -> {
                     // if there are no influences, unclaim chunk
                     if (influences.containsKey(coreFaction)) {
+                        // remove one point of influence from this chunk bc we are removing a core
                         int count = influences.get(coreFaction).decrementAndGet();
                         if (count == 0) {
                             influences.remove(coreFaction);
@@ -222,7 +231,7 @@ public class FactionCoreService {
                     if (influences.size() == 0) {
                         // unclaim chunk
                         try {
-                            factionService.unclaimChunk(coreFaction, world, centerChunkX + finalI, centerChunkZ + finalJ);
+                            factionService.unclaimChunk(coreFaction, world, coordinates.getX(), coordinates.getZ());
                         } catch (FactionDoesntExistException e) {
                             throw new CompletionException(e);
                         }
@@ -253,12 +262,12 @@ public class FactionCoreService {
                     // make the most influential faction take the chunk
                     // unclaim chunk
                     try {
-                        factionService.unclaimChunk(coreFaction, world, centerChunkX + finalI, centerChunkZ + finalJ);
+                        factionService.unclaimChunk(coreFaction, world, coordinates.getX(), coordinates.getZ());
                     } catch (FactionDoesntExistException e) {
                         throw new CompletionException(e);
                     }
                     try {
-                        factionService.claimChunk(maxInfluence.getKey(), world, centerChunkX + finalI, centerChunkZ + finalJ);
+                        factionService.claimChunk(maxInfluence.getKey(), world, coordinates.getX(), coordinates.getZ());
                     } catch (FactionDoesntExistException e) {
                         throw new CompletionException(e);
                     }
@@ -268,25 +277,32 @@ public class FactionCoreService {
         }
         // wait for all the claims and metadata to be removed
         return CompletableFuture.allOf(futures)
+        // ensure that the core metadata is removed
+        .thenCompose(s -> factionCoreStorage.removeMetadata(block))
         // remove crystal and show effects
         .thenAccept((c) -> {
             // get location
             Location location = block.getLocation();
 
-            // remove the crystal
-            world.getNearbyEntities(location, 1, 2, 1)
-                .stream().filter(entity -> entity instanceof EnderCrystal)
-                .filter(entity -> entity.hasMetadata(ENDER_CRYSTAL_METADATA_KEY))
-                .forEach(Entity::remove);
+            // run on main thread
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                // remove the crystal
+                world.getNearbyEntities(location, 1, 2, 1)
+                    .stream().filter(entity -> entity instanceof EnderCrystal)
+                    .forEach(Entity::remove);
+
+                // remove core block
+                block.breakNaturally();
+            });
         });
     }
 
     /**
      * Calculates how many faction cores are protecting a given chunk.
-     * Does not include the influence of a core inside of the chunk.
+     * Includes the core in the chunk.
      * @return How many faction cores are protecting a given chunk.
      */
-    public CompletableFuture<Map<String, AtomicInteger>> getChunkInfluences(World world, int chunkX, int chunkZ) {
+    public CompletableFuture<Map<String, AtomicInteger>> getChunkInfluences(ChunkInfo chunkInfo) {
         ConcurrentMap<String, AtomicInteger> counts = new ConcurrentHashMap<>();
         CompletableFuture<Void>[] futures = new CompletableFuture[9];
         // check each neighboring chunk
@@ -294,16 +310,17 @@ public class FactionCoreService {
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
                 // get neighboring chunk
-                ChunkInfo chunkInfo = new ChunkInfo(world.getName(), new ChunkCoordinates(chunkX + x, chunkZ + z));
+                ChunkInfo neighboringInfo = new ChunkInfo(chunkInfo.getWorld(),
+                        new ChunkCoordinates(chunkInfo.getCoordinates().getX() + x, chunkInfo.getCoordinates().getZ() + z));
                 // count cores of the faction is chunk
-                futures[i] = factionCoreStorage.getMetadataInChunk(chunkInfo)
+                futures[i] = factionCoreStorage.getMetadataInChunk(neighboringInfo)
                 .thenAccept((map) -> {
-                   if (map == null) {
-                       // no faction cores in this chunk
-                       return;
-                   }
+                    if (map == null) {
+                        // no faction cores in this chunk
+                        return;
+                    }
 
-                   // increment faction cores
+                    // increment faction cores
                     Collection<String> factions = map.values();
                     for (String f : factions) {
                         AtomicInteger factionCoreCount = counts
@@ -395,7 +412,6 @@ public class FactionCoreService {
             Block block = chunk.getBlock(Integer.parseInt(position[0]),
                     Integer.parseInt(position[1]),
                     Integer.parseInt(position[2]));
-            Bukkit.getScheduler().runTask(plugin, (Runnable) block::breakNaturally);
 
             // remove core
             try {

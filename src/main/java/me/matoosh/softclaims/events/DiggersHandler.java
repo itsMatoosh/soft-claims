@@ -19,7 +19,6 @@ import me.matoosh.softclaims.service.FactionService;
 import me.matoosh.softclaims.util.LocationUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
-import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
@@ -37,8 +36,6 @@ import org.bukkit.potion.PotionEffectType;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public class DiggersHandler implements PacketListener, Listener {
@@ -201,6 +198,11 @@ public class DiggersHandler implements PacketListener, Listener {
 
             // save current dig progress
             digProgress.save();
+
+            // update dig animation
+            setDigAnimation(player,
+                    digProgress.getPosition(),
+                    digProgress.getAnimationProgress());
         }
 
         if (digProgress.getCurrentDurability() <= 0) {
@@ -211,9 +213,6 @@ public class DiggersHandler implements PacketListener, Listener {
             digProgress.getBlock().breakNaturally(tool);
         } else {
             // update progress
-            setDigAnimation(player,
-                    digProgress.getPosition(),
-                    digProgress.getAnimationProgress());
             communicationService.showDurability(
                     player,
                     digProgress.getCurrentDurability(),
@@ -297,7 +296,8 @@ public class DiggersHandler implements PacketListener, Listener {
     private void setDigAnimation(Player player, BlockPosition blockPosition, int progress) {
         PacketContainer packetContainer = new PacketContainer(PacketType.Play.Server.BLOCK_BREAK_ANIMATION);
         // set entity id
-        packetContainer.getIntegers().write(0, player.getEntityId() + 1);
+        packetContainer.getIntegers().write(0,
+                player.getEntityId() + Bukkit.getOnlinePlayers().size() + 1);
         // set block position
         packetContainer.getBlockPositionModifier().write(0, blockPosition);
         // set progress
@@ -305,8 +305,8 @@ public class DiggersHandler implements PacketListener, Listener {
 
         // send progress
         Bukkit.getScheduler().runTask(plugin,
-                () -> LocationUtil.getPlayersAroundPoint(
-                        blockPosition.toLocation(player.getWorld()), 1).forEach((p) -> {
+                () -> LocationUtil.getPlayersAroundPoint(blockPosition.toLocation(player.getWorld()), 1)
+        .forEach(p -> {
             // send
             try {
                 protocolManager.sendServerPacket(p, packetContainer);
@@ -323,19 +323,6 @@ public class DiggersHandler implements PacketListener, Listener {
      */
     public boolean isDigging(Player player) {
         return diggers.containsKey(player.getEntityId());
-    }
-
-    /**
-     * Gets players around a location.
-     * @param location Location around which to find players.
-     * @param distance Max distance around the location.
-     * @return List of players around the location within the specified distance.
-     */
-    public List<Player> getNearbyPlayers(Location location, int distance) {
-        int distSquared = distance * distance;
-        return Bukkit.getOnlinePlayers().parallelStream().filter(
-                (p) -> p.getLocation().distanceSquared(location) < distSquared)
-                .collect(Collectors.toList());
     }
 
     /**
