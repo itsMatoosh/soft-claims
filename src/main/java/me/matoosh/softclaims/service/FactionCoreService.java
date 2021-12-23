@@ -23,7 +23,6 @@ import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
-import org.bukkit.metadata.FixedMetadataValue;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -33,9 +32,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Getter
 @Log
 public class FactionCoreService {
-
-    public static final String ENDER_CRYSTAL_METADATA_KEY = "softclaims-faction";
-
     private final SoftClaimsPlugin plugin;
     /**
      * Reference to the faction service.
@@ -140,9 +136,6 @@ public class FactionCoreService {
                 crystal.setShowingBottom(false);
                 crystal.setPersistent(true);
                 crystal.setCustomName(claimingFaction.name() + "'s Core");
-                crystal.setCustomNameVisible(true);
-                crystal.setMetadata(ENDER_CRYSTAL_METADATA_KEY,
-                        new FixedMetadataValue(plugin, claimingFaction.id()));
 
                 // TODO: spawn particles
             });
@@ -341,30 +334,22 @@ public class FactionCoreService {
      * @param core The core block.
      * @return List of 9 chunks influenced by the core.
      */
-    public CompletableFuture<Chunk[]> getInfluencedChunks(Block core) {
+    public ChunkInfo[] getInfluencedChunks(Block core) {
         // get center chunk coords
         int centerX = core.getX() / 16;
         int centerZ = core.getZ() / 16;
 
         // get chunks around center
-        Chunk[] chunks = new Chunk[9];
-        CompletableFuture<Void>[] futures = new CompletableFuture[9];
-        AtomicInteger chunkArrIndex = new AtomicInteger();
+        ChunkInfo[] chunks = new ChunkInfo[9];
         int i = 0;
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
-                futures[i] = PaperLib.getChunkAtAsync(
-                        core.getWorld(), centerX + x, centerZ + z)
-                    .thenApply((c) -> {
-                        chunks[chunkArrIndex.get()] = c;
-                        chunkArrIndex.getAndIncrement();
-                        return null;
-                    });
+                chunks[i] = new ChunkInfo(core.getWorld().getName(),
+                        new ChunkCoordinates(centerX + x, centerZ + z));
                 i++;
             }
         }
-        return CompletableFuture.allOf(futures)
-                .thenApply((s) -> chunks);
+        return chunks;
     }
 
     /**

@@ -137,6 +137,11 @@ public class DiggersHandler implements PacketListener, Listener {
         // get block
         Block block = player.getWorld().getBlockAt(position.getX(), position.getY(), position.getZ());
 
+        // ensure block has durability
+        if (!blockDurabilityService.hasDurability(block)) {
+            return;
+        }
+
         // allow fast-break if the player has appropriate faction perms
         if (factionService.canPlayerDestroyInFaction(player, block.getChunk())) {
             return;

@@ -6,10 +6,10 @@ import me.matoosh.softclaims.exception.faction.FactionDoesntExistException;
 import me.matoosh.softclaims.faction.Faction;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
+import org.bukkit.Location;
 import org.bukkit.Particle;
-import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.Vector;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,6 +21,18 @@ import java.util.stream.Collectors;
  */
 @RequiredArgsConstructor
 public class BlockRepairService implements IReloadable {
+
+    /**
+     * Vectors for each side of the block.
+     */
+    private static final Vector[] SIDE_VECTORS = {
+        new Vector(0.65, 0, 0),
+        new Vector(-0.65, 0, 0),
+        new Vector(0, 0.65, 0),
+        new Vector(0, -0.65, 0),
+        new Vector(0, 0, 0.65),
+        new Vector(0, 0, -0.65),
+    };
 
     private final FactionService factionService;
     private final BlockDurabilityService blockDurabilityService;
@@ -81,7 +93,7 @@ public class BlockRepairService implements IReloadable {
      */
     private void repairTick() {
         // get repair delta
-        if (repairDelta == 0) {
+        if (repairDelta <= 0) {
             return;
         }
 
@@ -95,23 +107,14 @@ public class BlockRepairService implements IReloadable {
             } catch (FactionDoesntExistException ignored) {
             }
 
-            // calculate faction chunk influence
-            int powerSaturation = (int) (faction.power() - factionChunks.size());
-
-            // calculate repair delta
-            int repairDeltaAdjusted = 0;
-            if (powerSaturation >= 0) {
-                repairDeltaAdjusted = repairDelta;
-            }
-
-            // skip if no repair
-            if (repairDeltaAdjusted <= 0) {
+            // dont repair if not enough power
+            if (faction.power() < factionChunks.size()) {
                 return;
             }
 
             // heal blocks
             for (Chunk factionChunk : factionChunks) {
-                blockDurabilityService.modifyDurabilitiesInChunk(factionChunk, repairDeltaAdjusted)
+                blockDurabilityService.modifyDurabilitiesInChunk(factionChunk, repairDelta)
                 .thenApply((modified) -> {
                     healedBlocks.put(factionChunk, modified.stream().map((s) -> {
                         String[] posUnparsed = s.split(",");
@@ -164,29 +167,15 @@ public class BlockRepairService implements IReloadable {
      * @param position The position of the block in the chunk to animate.
      */
     private void doHealAnimation(Chunk chunk, int[] position) {
-        Block b = chunk.getBlock(position[0], position[1], position[2]);
-        for (int i = 0; i < 6; i++) {
-            Block adjacent = b.getRelative(blockFaceFromInt(i));
-            if (adjacent.isEmpty()) {
-                adjacent.getWorld().spawnParticle(
-                        Particle.COMPOSTER, adjacent.getLocation(), 1);
-            }
-        }
-    }
+        // get block center location
+        Location centerLocation = new Location(
+                chunk.getWorld(), position[0], position[1], position[2])
+                .add(0.5, 0.5, 0.5);
 
-    /**
-     * Gets a block face from the block face number.
-     * @param i block face number.
-     * @return The block face.
-     */
-    private BlockFace blockFaceFromInt(int i) {
-        return switch (i) {
-            default -> BlockFace.UP;
-            case 1 -> BlockFace.DOWN;
-            case 2 -> BlockFace.NORTH;
-            case 3 -> BlockFace.SOUTH;
-            case 4 -> BlockFace.EAST;
-            case 5 -> BlockFace.WEST;
-        };
+        // spawn particles on each side
+        for (Vector sideVector : SIDE_VECTORS) {
+            Location loc = centerLocation.add(sideVector);
+            chunk.getWorld().spawnParticle(Particle.COMPOSTER, loc, 2);
+        }
     }
 }

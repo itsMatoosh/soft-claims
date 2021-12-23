@@ -121,7 +121,9 @@ public class BlockDurabilityService {
      * @return Current durability of the block.
      */
     public CompletableFuture<Double> getDurabilityRelative(Block block) {
-        if (block == null) return CompletableFuture.completedFuture(0d);
+        if (block == null) {
+            return CompletableFuture.completedFuture(0d);
+        }
 
         // check if block has durability
         if (!hasDurability(block)) {
@@ -167,14 +169,6 @@ public class BlockDurabilityService {
     }
 
     /**
-     * Clears all durability data in a chunk.
-     * @param chunk The chunk.
-     */
-    public CompletableFuture<Map<String, Double>> clearDurabilitiesInChunk(Chunk chunk) {
-        return durabilityStorage.removeMetadataForChunk(ChunkInfo.fromChunk(chunk));
-    }
-
-    /**
      * Clears durability of a block.
      * @param block The block.
      */
@@ -213,7 +207,8 @@ public class BlockDurabilityService {
      * @param chunk The chunk in which to clear durabilities.
      */
     public CompletableFuture<Void> clearAndBreakUnhealthyBlocksInChunk(Chunk chunk) {
-        return clearDurabilitiesInChunk(chunk).thenAccept(durabilities -> {
+        return durabilityStorage.removeMetadataForChunk(ChunkInfo.fromChunk(chunk))
+        .thenAccept(durabilities -> {
             if (durabilities != null) {
                 durabilities.forEach((key, durability) -> {
                     // get position and durability of the block
